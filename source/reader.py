@@ -61,7 +61,7 @@ def get_scaled_mrt_data(data_path=None):
     return data
 
 
-def mrt_simple_lstm_data(batch_size, truncated_backpro_len, num_prediction_steps=1,
+def mrt_simple_lstm_data(batch_size, truncated_backpro_len,
                          train_ratio=0.6, val_ratio=0.2, data_path=None):
     '''Produce the training, validation and test set
 
@@ -76,19 +76,19 @@ def mrt_simple_lstm_data(batch_size, truncated_backpro_len, num_prediction_steps
     :param data_path: the file path to the data file
     :return:
             (x_train, y_train), (x_val, y_val), (x_test, y_test)
-            x_train: [num_train_batches, batch_size, truncated_backpro_len, feature_dim],
-            y_train: [num_train_batches, batch_size, num_prediction_steps, feature_dim],
-            x_val: [num_val_samples, truncated_backpro_len, feature_dim]
-            y_val: [num_val_samples, num_prediction_steps, feature_dim]
-            x_test: [num_test_samples, truncated_backpro_len, feature_dim]
-            y_test: [num_test_samples, num_prediction_steps, feature_dim]
+            x_train: [num_train_batches, batch_size, truncated_backpro_len, feature_len],
+            y_train: [num_train_batches, batch_size, feature_len],
+            x_val: [num_val_samples, truncated_backpro_len, feature_len]
+            y_val: [num_val_samples, feature_len]
+            x_test: [num_test_samples, truncated_backpro_len, feature_len]
+            y_test: [num_test_samples, feature_dim]
     '''
 
     data = get_scaled_mrt_data(data_path)
     total_data_len = data.shape[0]
     num_features = data.shape[1]
 
-    seq_len = truncated_backpro_len + num_prediction_steps
+    seq_len = truncated_backpro_len + 1
     num_time_windows = total_data_len - seq_len
     time_windows = []
 
@@ -109,14 +109,14 @@ def mrt_simple_lstm_data(batch_size, truncated_backpro_len, num_prediction_steps
     train = train[0:num_train_batches *  batch_size, :, :]
 
     train = np.reshape(train, (-1, batch_size, train.shape[1], train.shape[2]))
-    x_train = train[:, :, :-num_prediction_steps, :]
-    y_train = train[:, :, -num_prediction_steps:, :]
+    x_train = train[:, :, :-1, :]
+    y_train = train[:, :, -1, :]
 
-    x_val = val[:, :-num_prediction_steps, :]
-    y_val = val[:, -num_prediction_steps:, :]
+    x_val = val[:, :-1, :]
+    y_val = val[:, -1, :]
 
-    x_test = test[:, :-num_prediction_steps, :]
-    y_test = test[:, -num_prediction_steps:, :]
+    x_test = test[:, :-1, :]
+    y_test = test[:, -1, :]
 
     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
 
