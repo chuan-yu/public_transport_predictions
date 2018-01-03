@@ -107,30 +107,29 @@ class Simple_LSTM():
                 writer.add_summary(train_summ, global_step=self._sess.run(self._global_step))
 
             # Evaluate validation loss at the end of each epoch
-            val_loss_series = np.ndarray(x_val.shape[0])
+            val_predictions = np.empty_like(y_val)
 
             for j in range(x_val.shape[0]):
-                val_loss = self._sess.run(self._total_loss,
+                predictions = self._sess.run(self._prediction_series,
                                           feed_dict={
                                               self._batchX_placeholder: x_val[[j], :, :],
                                               self._batchY_placeholder: y_val[[j], :],
                                               self._batch_size: 1
                                           })
-                val_loss_series[j] = val_loss
+                val_predictions[j] = predictions
 
-            self._val_loss = self._sess.run(tf.reduce_mean(val_loss_series))
-
+            val_loss = self._sess.run(self._compute_rmse(y_val, val_predictions))
             summary = tf.Summary(value=[tf.Summary.Value(tag="validation_rmse",
-                                                         simple_value=self._val_loss)])
+                                                         simple_value=val_loss)])
             writer.add_summary(summary, global_step=self._sess.run(self._global_step))
             writer.flush()
 
             # print the errors at the end of each epoch
-            print("Step", epoch, "train loss", total_loss, ", val_loss: ", self._val_loss)
+            print("Step", epoch, "train loss", total_loss, ", val_loss: ", val_loss)
             # print("Step", epoch, "train loss", total_loss)
 
 
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 100 == 0:
                 self._saver.save(self._sess, "checkpoints/simple_lstm.ckpt", global_step=self._global_step)
 
         writer.close()
@@ -167,13 +166,13 @@ class Simple_LSTM():
 
 
 class LSTMConfig():
-    train_batch_size = 20
-    state_size = 32
+    train_batch_size = 30
+    state_size = 256
     num_layers = 1
-    input_size = 141
-    output_size = 141
+    input_size = 2
+    output_size = 2
     time_steps = 50
-    lr = 0.01
+    lr = 0.001
     num_epochs = 200
     checkpoint = "checkpoints/simple_lstm.ckpt"
 
@@ -182,34 +181,62 @@ if __name__ == "__main__":
 
     config = LSTMConfig()
 
+    # Build model
+    lstm_model = Simple_LSTM(config)
+
+    #########
+    ## MRT
+    #########
+
     # Load data
     data_path = "data/count_by_hour_with_header.csv"
-    train, val, test = reader.mrt_simple_lstm_data(config.train_batch_size, config.time_steps,
-                                                   data_path=data_path)
+    data_scaled = reader.get_scaled_mrt_data(data_path, [0, 10])
+    train, val, test = reader.mrt_simple_lstm_data(data_scaled, config.train_batch_size, config.time_steps)
     x_train, y_train = train[0], train[1]
     x_val, y_val, = val[0], val[1]
     x_test, y_test = test[0], test[1]
-    # x_full, y_full = reader.get_raw_data()
-
-    # Build model
-    lstm_model = Simple_LSTM(config)
 
     # Run training
     # lstm_model.fit(x_train, y_train, x_val, y_val)
 
     # # Make predictions
     x_input = x_test[0, :, :]
-    # time_features = x_test[0, 1:, -2:]
-    # # # predictions = lstm_model.predict(x_test)
-    # _, initial_state = lstm_model.predict(x_val)
-
+    # # time_features = x_test[0, 1:, -2:]
+    # # # # predictions = lstm_model.predict(x_test)
+    # # _, initial_state = lstm_model.predict(x_val)
+    #
     predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
-    # predictions = lstm_model.predict(x_test)
-    plt.plot(predictions[0:59, 0], label="predictions")
-    plt.plot(y_test[0:59, 0], label="true values")
+    # # predictions = lstm_model.predict(x_test)
+    plt.plot(predictions[:, 0], label="predictions")
+    plt.plot(y_test[:, 0], label="true values")
     plt.legend(loc='upper right')
     plt.show()
     print("done")
 
+    ############
+    ## Sine data
+    ############
+    # x = np.linspace(0, 120, 420)
+    # data = y = reader.generate_sin_signal(x, noisy=True)
+    # train, val, test = reader.mrt_simple_lstm_data(data, config.train_batch_size, config.time_steps)
+    # x_train, y_train = train[0], train[1]
+    # x_val, y_val, = val[0], val[1]
+    # x_test, y_test = test[0], test[1]
+    # lstm_model.fit(x_train, y_train, x_val, y_val)
+    #
+    # # predictions = lstm_model.predict(x_test)
+    #
+    # x_input = x_test[0, :, :]
+    # predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
+    # plt.plot(predictions[:, 0], label="predictions")
+    # plt.plot(y_test[:, 0], label="true values")
+    # plt.legend(loc='upper right')
+    # plt.show()
+    #
+    # squared_error = np.square(np.subtract(predictions[:, 0], y_test[:, 0]))
+    # mean_error = np.mean(squared_error)
+    # rmse = np.sqrt(mean_error)
+    #
+    # print(rmse)
 
 

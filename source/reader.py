@@ -1,6 +1,17 @@
 import numpy as np
 import pandas as pd
 
+
+def generate_sin_signal(x, noisy=False):
+    y = np.sin(x)
+    if noisy:
+        noise = np.random.rand(len(x)) * 0.2
+        y = y + noise
+
+    y = np.reshape(y, (y.shape[0], 1))
+    return y
+
+
 def _read_raw_data(data_path=None):
     '''Read data from a csv file.
 
@@ -20,7 +31,7 @@ def _scale(data):
 
     For each column, X = (X - X.min()) / (X.max() - X.min())
 
-    :param data: numpy 2-d darray
+    :param data: numpy 2-d array
     :return: numpy 2-d array
     '''
 
@@ -32,39 +43,28 @@ def _scale(data):
     data = np.divide(data, minmax_range)
     return data
 
-def get_scaled_mrt_data(data_path=None):
+def get_scaled_mrt_data(data_path=None, stations_codes=None):
     ''' Get scaled mrt data
 
+    :param stations_codes: a list of selected station codes. If None, return data for all stations
     :param data_path: file path of the data
     :return: numpy array of size [time_steps, num_stations]
     '''
     # read raw data as pandas Dataframe
     raw_data = _read_raw_data(data_path)
-
-    # # Convert the column name to datetime and offset the hour by 1
-    # # Offset by 1 because the daytime is for the next time step
-    # date_time = pd.to_datetime(raw_data.columns.values) + pd.Timedelta(hours=1)
-    #
-    # # Get hour from column name
-    # hour = np.array(date_time.hour.tolist())
-    # hour = hour.reshape((1, hour.shape[0]))
-    # hour = _scale(hour)
-    #
-    # # Get day of week from column name
-    # day_week = np.array(date_time.dayofweek.tolist())
-    # day_week = day_week.reshape((1, day_week.shape[0]))
-    # day_week = _scale(day_week)
+    if stations_codes is not None:
+        raw_data = raw_data[stations_codes]
 
     data = raw_data.as_matrix(columns=None)
     data = _scale(data)
-
     return data
 
 
-def mrt_simple_lstm_data(batch_size, truncated_backpro_len,
-                         train_ratio=0.6, val_ratio=0.2, data_path=None):
+def mrt_simple_lstm_data(data, batch_size, truncated_backpro_len,
+                         train_ratio=0.6, val_ratio=0.2):
     '''Produce the training, validation and test set
 
+    :param data: time series data of shape [time_steps, feature_len]
     :param batch_size: training data batch size
     :param truncated_backpro_len: the number of time steps with which backpropogation through time is done. Also equal to
     the time window size.
@@ -84,7 +84,6 @@ def mrt_simple_lstm_data(batch_size, truncated_backpro_len,
             y_test: [num_test_samples, feature_dim]
     '''
 
-    data = get_scaled_mrt_data(data_path)
     total_data_len = data.shape[0]
     num_features = data.shape[1]
 
@@ -120,39 +119,75 @@ def mrt_simple_lstm_data(batch_size, truncated_backpro_len,
 
     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
 
-# def lstm_data_producer(batch_size, data_path=None):
-#     train_portions = 0.6
-#     val_portions = 0.2
-#
-#     # Get raw data
-#     x, y = get_raw_data(data_path)
-#
-#     # split train, val, test
-#     total_time_steps = x.shape[0]
-#     train_time_steps = int(total_time_steps * train_portions)
-#     val_time_steps = int(total_time_steps * val_portions)
-#     x_train = x[0:train_time_steps, :]
-#     y_train = y[0:train_time_steps, :]
-#     x_val = x[train_time_steps:train_time_steps+val_time_steps, :]
-#     y_val = y[train_time_steps:train_time_steps+val_time_steps, :]
-#     x_test = x[train_time_steps+val_time_steps:, :]
-#     y_test = y[train_time_steps + val_time_steps:, :]
-#
-#     # reshape to [batch_size, input_size]
-#     train_batch_len = x_train.shape[0] // batch_size
-#     x_train = x_train[0:batch_size * train_batch_len]
-#     y_train = y_train[0:batch_size * train_batch_len]
-#
-#     x_train = np.reshape(x_train, (batch_size, -1, x_train.shape[1]))
-#     y_train = np.reshape(y_train, (batch_size, -1, y_train.shape[1]))
-#
-#     x_val = np.reshape(x_val, (1, -1, x_val.shape[1]))  # batch_size=1 for val set
-#     y_val = np.reshape(y_val, (1, -1, y_val.shape[1]))
-#
-#     x_test = np.reshape(x_test, (1, -1, x_test.shape[1]))  # batch_size=1 for test set
-#     y_test = np.reshape(y_test, (1, -1, y_test.shape[1]))
-#
-#     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
+def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, train_ratio=0.6, val_ratio=0.2):
+
+    total_time_steps = data.shape[0]
+
+    num_train = round(total_time_steps * train_ratio)
+    num_val = round(total_time_steps * val_ratio)
+    num_test = total_time_steps - num_train - num_val
+
+    train_raw = data[0:num_train]
+    val_raw = data[num_train-input_seq_len:num_train + num_val]
+    test_raw = data[num_train + num_val-input_seq_len:]
+
+    total_seq_len = input_seq_len + output_seq_len
+
+    num_train_batches = num_train // batch_size
+    train_raw = train_raw[0:num_train_batches * batch_size]
+    train_raw = np.reshape(train_raw, (batch_size, -1, train_raw.shape[1]))
+    val_raw = np.reshape(val_raw, (1, val_raw.shape[0], val_raw.shape[1]))
+    test_raw = np.reshape(test_raw, (1, test_raw.shape[0], test_raw.shape[1]))
+
+    train = _convert_to_windows(train_raw, total_seq_len)
+    val = _convert_to_windows(val_raw, total_seq_len, False, output_seq_len)
+    test = _convert_to_windows(test_raw, total_seq_len, False, output_seq_len)
+
+    train = np.swapaxes(train, 1, 2)
+    val = np.swapaxes(val, 1, 2)
+    test = np.swapaxes(test, 1, 2)
+
+    x_train = train[:, :-output_seq_len, :, :]
+    y_train = train[:, -output_seq_len:, :, :]
+
+    x_val = val[:, :-output_seq_len, :, :]
+    y_val = val[:, -output_seq_len:, :, :]
+
+    x_test = test[:, :-output_seq_len, :, :]
+    y_test = test[:, -output_seq_len:, :, :]
+
+    return (x_train, y_train), (x_val, y_val), (x_test, y_test)
+
+def _convert_to_windows(data, total_seq_len, train=True, output_seq_len=1):
+    '''Convert time series data to time windows of seq_len
+    Example:
+        data = [0, 1, 2, 3, 4, 5, 6]
+        total_seq_len = 5
+        output_seq_len = 2
+        if train:
+            return [[0, 1, 2, 3, 4], [1, 2, 3, 4, 5], [2, 3, 4, 5, 6]]
+        if not train:
+            return [[0, 1, 2, 3, 4], [2, 3, 4, 5, 6]]
+            when train is False, time windows are taken by shifting output_seq_len positions to the right
+
+    :param data: input data of shape [batch_size, time_steps, feature_len]
+    :param total_seq_len: sequence length
+    :param output_seq_len: output sequence length
+    :param train: whether the output is for training
+    :return: numpy array of shape [num_time_windows, batch_size, total_seq_len, feature_len]
+    '''
+    if train:
+        forward_steps = 1
+    else:
+        forward_steps = output_seq_len
+
+    num_time_windows = (data.shape[1] - total_seq_len) // forward_steps + 1
+    time_windows = np.ndarray((num_time_windows, data.shape[0], total_seq_len, data.shape[2]))
+
+    for i in range(num_time_windows):
+        time_windows[i] = data[:, i * forward_steps:i * forward_steps + total_seq_len]
+
+    return time_windows
 
 
 
