@@ -10,7 +10,18 @@ def main():
     y = reader.generate_sin_signal(x, noisy=False)
     # plt.plot(x, y, 'ro')
     # plt.show()
-    res = reader.produce_seq2seq_data(y, 2, 5, 3)
+    train, val, test = reader.produce_seq2seq_data(y, 2, 5, 3, time_major=False)
+    x_train, y_train = train[0], train[1]
+    x_val, y_val = val[0], val[1]
+    x_test, y_test = test[0], test[1]
+
+    input = y_test[2, 0, :, :]
+    output = y_test[3, 0, :, :]
+
+    plt.plot(range(3), input, 'ro')
+    plt.plot(range(3, 6), output, 'bo')
+    plt.show()
+
     return
 
 if __name__ == "__main__":

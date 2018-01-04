@@ -141,7 +141,6 @@ class LSTMConfig():
     input_size = 1
     output_size = 1
     input_time_steps = 20
-    
     output_time_steps = 20
     lr = 0.01
     num_epochs = 5000

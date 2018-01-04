@@ -119,13 +119,41 @@ def mrt_simple_lstm_data(data, batch_size, truncated_backpro_len,
 
     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
 
-def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, train_ratio=0.6, val_ratio=0.2):
+def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, time_major=False, train_ratio=0.6, val_ratio=0.2):
+    ''' Produce seq2seq data
+
+    :param data: time series data of shape [time_steps, feature_len]
+    :param batch_size: training data batch size
+    :param input_seq_len: the input sequence length for every training sample
+    :param output_seq_len: the output sequence length for every training sample
+    :param time_major: whether outputs are time-majored.
+    :param train_ratio: the ratio of training samples to the total data samples. The value is a float between 0 and 1.
+    Default is 0.6.
+    :param val_ratio: val_ratio: the ration of training samples to the total data samples. The value is a float between 0 and 1.
+    Default is 0.2.
+    :return:
+            (x_train, y_train), (x_val, y_val), (x_test, y_test)
+            if time_major:
+                x_train: [num_train_batches, input_seq_len, batch_size, feature_len],
+                y_train: [num_train_batches, output_seq_len, batch_size, feature_len],
+                x_val: [num_val_batches, input_seq_len, 1, feature_len]
+                y_val: [num_val_batches,output_seq_len, 1, feature_len]
+                x_test: [num_test_batches, input_seq_len, 1, feature_len]
+                y_test: [num_test_batches, output_seq_len, 1, feature_len]
+            else:
+                x_train: [num_train_batches, batch_size, input_seq_len, feature_len],
+                y_train: [num_train_batches, batch_size, output_seq_len, feature_len],
+                x_val: [num_val_batches, 1, input_seq_len, feature_len]
+                y_val: [num_val_batches, 1, output_seq_len, feature_len]
+                x_test: [num_test_batches, 1, input_seq_len, feature_len]
+                y_test: [num_test_batches, 1, output_seq_len, feature_len]
+
+    '''
 
     total_time_steps = data.shape[0]
 
     num_train = round(total_time_steps * train_ratio)
     num_val = round(total_time_steps * val_ratio)
-    num_test = total_time_steps - num_train - num_val
 
     train_raw = data[0:num_train]
     val_raw = data[num_train-input_seq_len:num_train + num_val]
@@ -143,18 +171,33 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, train_
     val = _convert_to_windows(val_raw, total_seq_len, False, output_seq_len)
     test = _convert_to_windows(test_raw, total_seq_len, False, output_seq_len)
 
-    train = np.swapaxes(train, 1, 2)
-    val = np.swapaxes(val, 1, 2)
-    test = np.swapaxes(test, 1, 2)
+    if time_major:
 
-    x_train = train[:, :-output_seq_len, :, :]
-    y_train = train[:, -output_seq_len:, :, :]
+        # it time_major, the 2nd aix is the sequence length
+        train = np.swapaxes(train, 1, 2)
+        val = np.swapaxes(val, 1, 2)
+        test = np.swapaxes(test, 1, 2)
 
-    x_val = val[:, :-output_seq_len, :, :]
-    y_val = val[:, -output_seq_len:, :, :]
+        x_train = train[:, :-output_seq_len, :, :]
+        y_train = train[:, -output_seq_len:, :, :]
 
-    x_test = test[:, :-output_seq_len, :, :]
-    y_test = test[:, -output_seq_len:, :, :]
+        x_val = val[:, :-output_seq_len, :, :]
+        y_val = val[:, -output_seq_len:, :, :]
+
+        x_test = test[:, :-output_seq_len, :, :]
+        y_test = test[:, -output_seq_len:, :, :]
+
+    else:
+
+        # if not time_major, the 3rd axis is the sequence length
+        x_train = train[:, :, :-output_seq_len, :]
+        y_train = train[:, :, -output_seq_len:, :]
+
+        x_val = val[:, :, :-output_seq_len, :]
+        y_val = val[:, :, -output_seq_len:, :]
+
+        x_test = test[:, :, :-output_seq_len, :]
+        y_test = test[:, :, -output_seq_len:, :]
 
     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
 

@@ -37,7 +37,7 @@ class Simple_LSTM():
     def _create_placeholders(self):
         self._batchX_placeholder = tf.placeholder(tf.float32, [None, self.time_steps, self.input_size],
                                                   name="input")
-        self._batchY_placeholder = tf.placeholder(tf.float32, [None, self.output_size],
+        self._batchY_placeholder = tf.placeholder(tf.float32, [None, 1, self.output_size],
                                                   name="label")
         self._batch_size = tf.placeholder(tf.int32, [], name="batch_size")
 
@@ -72,7 +72,9 @@ class Simple_LSTM():
 
     def _define_loss(self):
         with tf.variable_scope("Loss"):
-            self._total_loss = self._compute_rmse(self._batchY_placeholder, self._prediction_series)
+            shape_y = tf.shape(self._batchY_placeholder)
+            y_true = tf.reshape(self._batchY_placeholder, [shape_y[0], shape_y[2]])
+            self._total_loss = self._compute_rmse(y_true, self._prediction_series)
 
     def _define_optimizer(self):
         with tf.variable_scope("Training"):
@@ -95,37 +97,41 @@ class Simple_LSTM():
 
         for epoch in range(config.num_epochs):
             for i in range(num_batches):
-
-                total_loss, train_steps, train_summ = self._sess.run(
+                x = x_train[i]
+                y = y_train[i]
+                train_loss, train_steps, train_summ = self._sess.run(
                     [self._total_loss, self._train_step, self._train_summary],
                     feed_dict={
-                        self._batchX_placeholder: x_train[i, :, :, :],
-                        self._batchY_placeholder: y_train[i, :, :],
+                        self._batchX_placeholder: x,
+                        self._batchY_placeholder: y,
                         self._batch_size: config.train_batch_size
                     })
 
                 writer.add_summary(train_summ, global_step=self._sess.run(self._global_step))
 
             # Evaluate validation loss at the end of each epoch
-            val_predictions = np.empty_like(y_val)
+            val_predictions = []
 
             for j in range(x_val.shape[0]):
                 predictions = self._sess.run(self._prediction_series,
                                           feed_dict={
-                                              self._batchX_placeholder: x_val[[j], :, :],
-                                              self._batchY_placeholder: y_val[[j], :],
+                                              self._batchX_placeholder: x_val[j],
+                                              self._batchY_placeholder: y_val[j],
                                               self._batch_size: 1
                                           })
-                val_predictions[j] = predictions
+                val_predictions.append(predictions)
 
-            val_loss = self._sess.run(self._compute_rmse(y_val, val_predictions))
+            val_predictions = np.array(val_predictions)
+
+            y_val_reshape = np.squeeze(y_val, axis=1)
+            val_loss = self._sess.run(self._compute_rmse(y_val_reshape, val_predictions))
             summary = tf.Summary(value=[tf.Summary.Value(tag="validation_rmse",
                                                          simple_value=val_loss)])
             writer.add_summary(summary, global_step=self._sess.run(self._global_step))
             writer.flush()
 
             # print the errors at the end of each epoch
-            print("Step", epoch, "train loss", total_loss, ", val_loss: ", val_loss)
+            print("Step", epoch, "train loss", train_loss, ", val_loss: ", val_loss)
             # print("Step", epoch, "train loss", total_loss)
 
 
@@ -136,21 +142,25 @@ class Simple_LSTM():
 
     def predict(self, x):
 
-        prediction_array = np.ndarray((x.shape[0], x.shape[2]))
+        prediction_array = []
         for i in range(x.shape[0]):
             prediction = self._sess.run(self._prediction_series,
                                          feed_dict={
                                              self._batchX_placeholder: x[[i], :, :],
                                              self._batch_size: 1
                                          })
-            prediction_array[i] = prediction
+            prediction_array.append(prediction)
+
+        prediction_array = np.array(prediction_array)
 
         return prediction_array
 
     def predict_multiple_steps(self, x, num_steps, initial_state=None):
-        batchX = np.reshape(x, (1, x.shape[0], x.shape[1]))
+
+        # batchX = np.reshape(x, (1, x.shape[0], x.shape[1]))
+        batchX = x
         prediction_list = []
-        for i in range(num_steps):
+        for j in range(num_steps):
             predictions = self._sess.run(self._prediction_series,
                                                         feed_dict={
                                                             self._batchX_placeholder: batchX,
@@ -166,11 +176,11 @@ class Simple_LSTM():
 
 
 class LSTMConfig():
-    train_batch_size = 30
-    state_size = 256
+    train_batch_size = 5
+    state_size = 30
     num_layers = 1
-    input_size = 2
-    output_size = 2
+    input_size = 1
+    output_size = 1
     time_steps = 50
     lr = 0.001
     num_epochs = 200
@@ -190,8 +200,10 @@ if __name__ == "__main__":
 
     # Load data
     data_path = "data/count_by_hour_with_header.csv"
-    data_scaled = reader.get_scaled_mrt_data(data_path, [0, 10])
-    train, val, test = reader.mrt_simple_lstm_data(data_scaled, config.train_batch_size, config.time_steps)
+    data_scaled = reader.get_scaled_mrt_data(data_path, [0])
+    # train, val, test = reader.mrt_simple_lstm_data(data_scaled, config.train_batch_size, config.time_steps)
+    train, val, test = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.time_steps,
+                                                   output_seq_len=1)
     x_train, y_train = train[0], train[1]
     x_val, y_val, = val[0], val[1]
     x_test, y_test = test[0], test[1]
@@ -199,19 +211,24 @@ if __name__ == "__main__":
     # Run training
     # lstm_model.fit(x_train, y_train, x_val, y_val)
 
-    # # Make predictions
-    x_input = x_test[0, :, :]
-    # # time_features = x_test[0, 1:, -2:]
-    # # # # predictions = lstm_model.predict(x_test)
-    # # _, initial_state = lstm_model.predict(x_val)
-    #
-    predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
-    # # predictions = lstm_model.predict(x_test)
+    # Make 1-step predictions
+    # predictions = lstm_model.predict(x_test[:, 0, :, :])
+    # plt.plot(predictions[:, 0], label="predictions")
+    # y_true = y_test.reshape((y_test.shape[0], 1))
+    # plt.plot(y_true, label="true values")
+    # plt.legend(loc='upper right')
+    # plt.show()
+
+    # Make multiple-step predictions
+    x_input = x_test[0]
+    predictions = lstm_model.predict_multiple_steps(x_input, 20)
     plt.plot(predictions[:, 0], label="predictions")
-    plt.plot(y_test[:, 0], label="true values")
+    y_true = y_test[0:predictions.shape[0]]
+    y_true = np.reshape(y_true, (y_true.shape[0], 1))
+    plt.plot(y_true, label="true values")
     plt.legend(loc='upper right')
     plt.show()
-    print("done")
+
 
     ############
     ## Sine data
