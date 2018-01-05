@@ -15,11 +15,11 @@ def main():
     x_val, y_val = val[0], val[1]
     x_test, y_test = test[0], test[1]
 
-    input = y_test[2, 0, :, :]
-    output = y_test[3, 0, :, :]
+    input = x_test[2, 0, :, :]
+    output = y_test[2, 0, :, :]
 
-    plt.plot(range(3), input, 'ro')
-    plt.plot(range(3, 6), output, 'bo')
+    plt.plot(range(5), input, 'ro')
+    plt.plot(range(5, 8), output, 'bo')
     plt.show()
 
     return

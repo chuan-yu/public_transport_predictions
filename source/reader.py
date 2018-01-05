@@ -57,6 +57,7 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None):
 
     data = raw_data.as_matrix(columns=None)
     data = _scale(data)
+
     return data
 
 
@@ -152,6 +153,8 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, time_m
 
     total_time_steps = data.shape[0]
 
+
+
     num_train = round(total_time_steps * train_ratio)
     num_val = round(total_time_steps * val_ratio)
 
@@ -161,15 +164,16 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, time_m
 
     total_seq_len = input_seq_len + output_seq_len
 
-    num_train_batches = num_train // batch_size
-    train_raw = train_raw[0:num_train_batches * batch_size]
-    train_raw = np.reshape(train_raw, (batch_size, -1, train_raw.shape[1]))
-    val_raw = np.reshape(val_raw, (1, val_raw.shape[0], val_raw.shape[1]))
-    test_raw = np.reshape(test_raw, (1, test_raw.shape[0], test_raw.shape[1]))
+    train_window = _convert_to_windows(train_raw, total_seq_len)
+    val_window = _convert_to_windows(val_raw, total_seq_len, False, output_seq_len)
+    test_window = _convert_to_windows(test_raw, total_seq_len, False, output_seq_len)
 
-    train = _convert_to_windows(train_raw, total_seq_len)
-    val = _convert_to_windows(val_raw, total_seq_len, False, output_seq_len)
-    test = _convert_to_windows(test_raw, total_seq_len, False, output_seq_len)
+    num_train_batches = train_window.shape[0] // batch_size
+    train_window = train_window[0:num_train_batches * batch_size]
+
+    train = np.reshape(train_window, (num_train_batches, batch_size, -1, train_window.shape[2]))
+    val = np.expand_dims(val_window, axis=1)
+    test = np.expand_dims(test_window, axis=1)
 
     if time_major:
 
@@ -213,22 +217,22 @@ def _convert_to_windows(data, total_seq_len, train=True, output_seq_len=1):
             return [[0, 1, 2, 3, 4], [2, 3, 4, 5, 6]]
             when train is False, time windows are taken by shifting output_seq_len positions to the right
 
-    :param data: input data of shape [batch_size, time_steps, feature_len]
+    :param data: input data of shape [time_steps, feature_len]
     :param total_seq_len: sequence length
     :param output_seq_len: output sequence length
     :param train: whether the output is for training
-    :return: numpy array of shape [num_time_windows, batch_size, total_seq_len, feature_len]
+    :return: numpy array of shape [num_time_windows, total_seq_len, feature_len]
     '''
     if train:
         forward_steps = 1
     else:
         forward_steps = output_seq_len
 
-    num_time_windows = (data.shape[1] - total_seq_len) // forward_steps + 1
-    time_windows = np.ndarray((num_time_windows, data.shape[0], total_seq_len, data.shape[2]))
+    num_time_windows = (data.shape[0] - total_seq_len) // forward_steps + 1
+    time_windows = np.ndarray((num_time_windows, total_seq_len, data.shape[1]))
 
     for i in range(num_time_windows):
-        time_windows[i] = data[:, i * forward_steps:i * forward_steps + total_seq_len]
+        time_windows[i] = data[i * forward_steps:i * forward_steps + total_seq_len, :]
 
     return time_windows
 

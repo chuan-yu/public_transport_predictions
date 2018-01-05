@@ -5,6 +5,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 class Simple_LSTM():
+    ''' Simple LSTM Model
+    '''
+
     def __init__(self, config):
         self.state_size = config.state_size
         self.num_layers = config.num_layers
@@ -89,6 +92,12 @@ class Simple_LSTM():
         writer.close()
 
     def fit(self, x_train, y_train, x_val, y_val):
+        '''Train the model
+        :param x_train: shape [num_batches, batch_size, time_steps, feature_len]
+        :param y_train: shape [num_batches, batch_size, feature len]
+        :param x_val: shape [num_val_samples, time_steps, feature_len], batch_size is always 1
+        :param y_val: shape [num_val_samples, feature_len], batch_size is always 1, output time step is 1
+        '''
 
         writer = tf.summary.FileWriter("summaries/")
         num_batches = x_train.shape[0]
@@ -138,7 +147,9 @@ class Simple_LSTM():
         writer.close()
 
     def predict(self, x):
-
+        '''Make one-step predictions
+        :param x: shape [num_samples, time_step, feature_len], batch_size is always 1
+        '''
         prediction_array = []
         for i in range(x.shape[0]):
             prediction = self._sess.run(self._prediction_series,
@@ -152,7 +163,12 @@ class Simple_LSTM():
 
         return prediction_array
 
-    def predict_multiple_steps(self, x, num_steps, initial_state=None):
+    def predict_multiple_steps(self, x, num_steps):
+        '''Make multipel-steps predictions
+        :param x: shape [time_step, feature_len], only input one sample
+        :param num_steps: the number of feature steps to predict
+        :return: None
+        '''
 
         batchX = np.reshape(x, (1, x.shape[0], x.shape[1]))
         prediction_list = []
@@ -172,14 +188,14 @@ class Simple_LSTM():
 
 
 class LSTMConfig():
-    train_batch_size = 5
+    train_batch_size = 30
     state_size = 30
     num_layers = 1
     input_size = 1
     output_size = 1
     time_steps = 50
-    lr = 0.01
-    num_epochs = 200
+    lr = 0.0005
+    num_epochs = 100
     checkpoint = "checkpoints/simple_lstm.ckpt"
 
 
@@ -207,8 +223,10 @@ if __name__ == "__main__":
     x_val = np.squeeze(x_val, axis=1)
     x_test = np.squeeze(x_test, axis=1)
     y_train = np.squeeze(y_train, axis=2)
-    y_val = np.reshape(y_val, (y_val.shape[0], y_val.shape[3]))
-    y_test = np.reshape(y_test, (y_test.shape[0], y_test.shape[3]))
+    y_val = np.squeeze(y_val, axis=(1, 2))
+    y_test = np.squeeze(y_test, axis=(1, 2))
+    # y_val = np.reshape(y_val, (y_val.shape[0], y_val.shape[3]))
+    # y_test = np.reshape(y_test, (y_test.shape[0], y_test.shape[3]))
 
 
     # Run training
@@ -224,11 +242,15 @@ if __name__ == "__main__":
 
     # Make multiple-step predictions
     x_input = x_test[0]
-    predictions = lstm_model.predict_multiple_steps(x_input, 120)
-    plt.plot(predictions[:, 0], label="predictions")
-    y_true = y_test[0:predictions.shape[0]]
-    y_true = np.reshape(y_true, (y_true.shape[0], 1))
-    plt.plot(y_true, label="true values")
+    predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
+
+    plt.plot(data_scaled, label="all data")
+    plt.plot(range(data_scaled.shape[0]-y_test.shape[0], data_scaled.shape[0]), predictions, label="predictions")
+
+    # plt.plot(predictions, label="predictions")
+    # y_true = y_test[0:predictions.shape[0]]
+    # y_true = np.reshape(y_true, (y_true.shape[0], 1))
+    # plt.plot(y_true, label="true values")
     plt.legend(loc='upper right')
     plt.show()
 
