@@ -142,7 +142,7 @@ class Simple_LSTM():
 
 
             if (epoch + 1) % 100 == 0:
-                self._saver.save(self._sess, "checkpoints/simple_lstm.ckpt", global_step=self._global_step)
+                self._saver.save(self._sess, config.checkpoint, global_step=self._global_step)
 
         writer.close()
 
@@ -163,7 +163,7 @@ class Simple_LSTM():
 
         return prediction_array
 
-    def predict_multiple_steps(self, x, num_steps):
+    def predict_multiple_steps(self, x, time_features):
         '''Make multipel-steps predictions
         :param x: shape [time_step, feature_len], only input one sample
         :param num_steps: the number of feature steps to predict
@@ -172,6 +172,9 @@ class Simple_LSTM():
 
         batchX = np.reshape(x, (1, x.shape[0], x.shape[1]))
         prediction_list = []
+
+        num_steps = time_features.shape[0]
+
         for j in range(num_steps):
             predictions = self._sess.run(self._prediction_series,
                                                         feed_dict={
@@ -179,8 +182,15 @@ class Simple_LSTM():
                                                             self._batch_size: 1
                                                         })
 
-            prediction_list.append(predictions.reshape(predictions.shape[1]))
-            batchX = np.append(batchX, predictions.reshape((1, 1, predictions.shape[1])), axis=1)
+            result = predictions.reshape(predictions.shape[1])
+            prediction_list.append(result)
+
+
+            time_feature = time_features[j]
+            new_sample = np.array([result, time_feature[0], time_feature[1]])
+            new_sample = new_sample.reshape(1, 1, new_sample.shape[0])
+
+            batchX = np.append(batchX, new_sample, axis=1)
             batchX = np.delete(batchX, 0, axis=1)
 
         prediction_list = np.array(prediction_list)
@@ -191,12 +201,12 @@ class LSTMConfig():
     train_batch_size = 30
     state_size = 30
     num_layers = 1
-    input_size = 1
+    input_size = 3
     output_size = 1
     time_steps = 50
-    lr = 0.0005
-    num_epochs = 100
-    checkpoint = "checkpoints/simple_lstm.ckpt"
+    lr = 0.0001
+    num_epochs = 400
+    checkpoint = "checkpoints/with_time_features/simple_lstm.ckpt"
 
 
 if __name__ == "__main__":
@@ -212,9 +222,8 @@ if __name__ == "__main__":
 
     # Load data
     data_path = "data/count_by_hour_with_header.csv"
-    data_scaled = reader.get_scaled_mrt_data(data_path, [0])
-    # train, val, test = reader.mrt_simple_lstm_data(data_scaled, config.train_batch_size, config.time_steps)
-    train, val, test = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.time_steps,
+    data_scaled = reader.get_scaled_mrt_data(data_path, [0], datetime_features=True)
+    train, val, test, test_time_features = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.time_steps,
                                                    output_seq_len=1)
     x_train, y_train = train[0], train[1]
     x_val, y_val, = val[0], val[1]
@@ -222,11 +231,10 @@ if __name__ == "__main__":
 
     x_val = np.squeeze(x_val, axis=1)
     x_test = np.squeeze(x_test, axis=1)
-    y_train = np.squeeze(y_train, axis=2)
-    y_val = np.squeeze(y_val, axis=(1, 2))
+    y_val = np.squeeze(y_val, axis=1)
     y_test = np.squeeze(y_test, axis=(1, 2))
-    # y_val = np.reshape(y_val, (y_val.shape[0], y_val.shape[3]))
-    # y_test = np.reshape(y_test, (y_test.shape[0], y_test.shape[3]))
+
+    test_time_features = np.squeeze(test_time_features, axis=(1, 2))
 
 
     # Run training
@@ -242,15 +250,17 @@ if __name__ == "__main__":
 
     # Make multiple-step predictions
     x_input = x_test[0]
-    predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
+    predictions = lstm_model.predict_multiple_steps(x_input, test_time_features)
 
-    plt.plot(data_scaled, label="all data")
+    plt.plot(data_scaled[:, 0], label="all data")
     plt.plot(range(data_scaled.shape[0]-y_test.shape[0], data_scaled.shape[0]), predictions, label="predictions")
 
     # plt.plot(predictions, label="predictions")
     # y_true = y_test[0:predictions.shape[0]]
     # y_true = np.reshape(y_true, (y_true.shape[0], 1))
+
     # plt.plot(y_true, label="true values")
+
     plt.legend(loc='upper right')
     plt.show()
 

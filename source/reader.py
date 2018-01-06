@@ -43,7 +43,7 @@ def _scale(data):
     data = np.divide(data, minmax_range)
     return data
 
-def get_scaled_mrt_data(data_path=None, stations_codes=None):
+def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=False):
     ''' Get scaled mrt data
 
     :param stations_codes: a list of selected station codes. If None, return data for all stations
@@ -54,6 +54,14 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None):
     raw_data = _read_raw_data(data_path)
     if stations_codes is not None:
         raw_data = raw_data[stations_codes]
+
+    if datetime_features:
+        index = pd.to_datetime(raw_data.index) + pd.DateOffset(hours=1)
+        hours = np.array(index.hour)
+        day_week = np.array(index.dayofweek)
+        raw_data['hour'] = hours
+        raw_data['day_of_week'] = day_week
+
 
     data = raw_data.as_matrix(columns=None)
     data = _scale(data)
@@ -162,6 +170,7 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, time_m
     val_raw = data[num_train-input_seq_len:num_train + num_val]
     test_raw = data[num_train + num_val-input_seq_len:]
 
+
     total_seq_len = input_seq_len + output_seq_len
 
     train_window = _convert_to_windows(train_raw, total_seq_len)
@@ -183,27 +192,31 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, time_m
         test = np.swapaxes(test, 1, 2)
 
         x_train = train[:, :-output_seq_len, :, :]
-        y_train = train[:, -output_seq_len:, :, :]
+        y_train = train[:, -output_seq_len:, :, [0]]
 
         x_val = val[:, :-output_seq_len, :, :]
-        y_val = val[:, -output_seq_len:, :, :]
+        y_val = val[:, -output_seq_len:, :, [0]]
 
         x_test = test[:, :-output_seq_len, :, :]
-        y_test = test[:, -output_seq_len:, :, :]
+        y_test = test[:, -output_seq_len:, :, [0]]
+
+        test_time_features = test[:, -output_seq_len:, :, 1:]
 
     else:
 
         # if not time_major, the 3rd axis is the sequence length
         x_train = train[:, :, :-output_seq_len, :]
-        y_train = train[:, :, -output_seq_len:, :]
+        y_train = train[:, :, -output_seq_len:, [0]]
 
         x_val = val[:, :, :-output_seq_len, :]
-        y_val = val[:, :, -output_seq_len:, :]
+        y_val = val[:, :, -output_seq_len:, [0]]
 
         x_test = test[:, :, :-output_seq_len, :]
-        y_test = test[:, :, -output_seq_len:, :]
+        y_test = test[:, :, -output_seq_len:, [0]]
 
-    return (x_train, y_train), (x_val, y_val), (x_test, y_test)
+        test_time_features = test[:, :, -output_seq_len:, 1:]
+
+    return (x_train, y_train), (x_val, y_val), (x_test, y_test), test_time_features
 
 def _convert_to_windows(data, total_seq_len, train=True, output_seq_len=1):
     '''Convert time series data to time windows of seq_len
