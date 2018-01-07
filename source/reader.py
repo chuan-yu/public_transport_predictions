@@ -159,8 +159,8 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len, time_m
     num_val = round(total_time_steps * val_ratio)
 
     train_raw = data[0:num_train]
-    val_raw = data[num_train-input_seq_len:num_train + num_val]
-    test_raw = data[num_train + num_val-input_seq_len:]
+    val_raw = data[num_train-input_seq_len-1:num_train + num_val]
+    test_raw = data[num_train + num_val - input_seq_len - 1:]
 
     total_seq_len = input_seq_len + output_seq_len
 

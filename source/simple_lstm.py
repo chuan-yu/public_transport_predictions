@@ -142,7 +142,7 @@ class Simple_LSTM():
 
 
             if (epoch + 1) % 100 == 0:
-                self._saver.save(self._sess, "checkpoints/simple_lstm.ckpt", global_step=self._global_step)
+                self._saver.save(self._sess, config.checkpoint, global_step=self._global_step)
 
         writer.close()
 
@@ -194,9 +194,9 @@ class LSTMConfig():
     input_size = 1
     output_size = 1
     time_steps = 50
-    lr = 0.0005
-    num_epochs = 100
-    checkpoint = "checkpoints/simple_lstm.ckpt"
+    lr = 0.0001
+    num_epochs = 200
+    checkpoint = "checkpoints/lstm_without_time_features/simple_lstm.ckpt"
 
 
 if __name__ == "__main__":
@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
 
     # Run training
-    # lstm_model.fit(x_train, y_train, x_val, y_val)
+    lstm_model.fit(x_train, y_train, x_val, y_val)
 
     # Make 1-step predictions
     # predictions = lstm_model.predict(x_test[:, 0, :, :])
@@ -244,9 +244,10 @@ if __name__ == "__main__":
     x_input = x_test[0]
     predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
 
-    plt.plot(data_scaled, label="all data")
+    plt.plot(data_scaled, label="true values")
     plt.plot(range(data_scaled.shape[0]-y_test.shape[0], data_scaled.shape[0]), predictions, label="predictions")
-
+    plt.axvline(x=594, color='g', linestyle='--')
+    plt.title('STN Bedok')
     # plt.plot(predictions, label="predictions")
     # y_true = y_test[0:predictions.shape[0]]
     # y_true = np.reshape(y_true, (y_true.shape[0], 1))
