@@ -1,6 +1,5 @@
 import os
 import tensorflow as tf
-import reader
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -9,15 +8,20 @@ class Simple_LSTM():
     '''
 
     def __init__(self, config):
+
+        tf.reset_default_graph()
+
         self.state_size = config.state_size
         self.num_layers = config.num_layers
         self.input_size = config.input_size
+        self.train_batch_size = config.train_batch_size
         self.output_size = config.output_size
         self.time_steps = config.time_steps
         self.lr = config.lr
         self.epochs = config.num_epochs
         self._sess = tf.Session()
         self._val_loss = 0
+        self.checkpoint = config.checkpoint
 
         self._create_placeholders()
         self._create_variables()
@@ -31,7 +35,7 @@ class Simple_LSTM():
         init = tf.global_variables_initializer()
         self._sess.run(init)
 
-        ckpt = tf.train.get_checkpoint_state(os.path.dirname(config.checkpoint))
+        ckpt = tf.train.get_checkpoint_state(os.path.dirname(self.checkpoint))
         if ckpt and ckpt.model_checkpoint_path:
             print("have checkpoints")
             print(ckpt.model_checkpoint_path)
@@ -79,7 +83,11 @@ class Simple_LSTM():
 
     def _define_optimizer(self):
         with tf.variable_scope("Training"):
-            self._train_step = tf.train.AdamOptimizer(self.lr).minimize(self._total_loss, global_step=self._global_step)
+
+            learning_rate = tf.train.exponential_decay(self.lr, self._global_step,
+                                           100, 0.7, staircase=True)
+            self._optimizer = tf.train.AdamOptimizer(learning_rate)
+            self._train_step = self._optimizer.minimize(self._total_loss)
 
     def _define_summaries(self):
         with tf.name_scope("summaries"):
@@ -91,6 +99,9 @@ class Simple_LSTM():
             writer = tf.summary.FileWriter('./graphs', sess.graph)
         writer.close()
 
+    def _increment_global_step(self):
+        self._sess.run(tf.assign(self._global_step, self._global_step + 1))
+
     def fit(self, x_train, y_train, x_val, y_val):
         '''Train the model
         :param x_train: shape [num_batches, batch_size, time_steps, feature_len]
@@ -101,8 +112,12 @@ class Simple_LSTM():
 
         writer = tf.summary.FileWriter("summaries/")
         num_batches = x_train.shape[0]
+        best_val_loss = 1000
 
-        for epoch in range(config.num_epochs):
+        for epoch in range(self.epochs):
+
+            self._increment_global_step()
+
             for i in range(num_batches):
                 x = x_train[i]
                 y = y_train[i]
@@ -111,7 +126,7 @@ class Simple_LSTM():
                     feed_dict={
                         self._batchX_placeholder: x,
                         self._batchY_placeholder: y,
-                        self._batch_size: config.train_batch_size
+                        self._batch_size: self.train_batch_size
                     })
 
                 writer.add_summary(train_summ, global_step=self._sess.run(self._global_step))
@@ -128,8 +143,6 @@ class Simple_LSTM():
                                           })
                 val_predictions[j] = predictions
 
-            val_predictions = np.array(val_predictions)
-
             val_loss = self._sess.run(self._compute_rmse(y_val, val_predictions))
             summary = tf.Summary(value=[tf.Summary.Value(tag="validation_rmse",
                                                          simple_value=val_loss)])
@@ -140,9 +153,14 @@ class Simple_LSTM():
             print("Step", epoch, "train loss", train_loss, ", val_loss: ", val_loss)
             # print("Step", epoch, "train loss", total_loss)
 
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                print("Achieved better val_loss. Saving model...")
 
-            if (epoch + 1) % 100 == 0:
-                self._saver.save(self._sess, config.checkpoint, global_step=self._global_step)
+                if not os.path.exists(os.path.dirname(self.checkpoint)):
+                    os.makedirs(os.path.dirname(self.checkpoint))
+
+                self._saver.save(self._sess, self.checkpoint, global_step=self._global_step)
 
         writer.close()
 
@@ -163,13 +181,15 @@ class Simple_LSTM():
 
         return prediction_array
 
-    def predict_multiple_steps(self, x, time_features):
+    def predict_multiple_steps(self, x, time_features, y_true=None):
         '''Make multipel-steps predictions
         :param x: shape [time_step, feature_len], only input one sample
         :param num_steps: the number of feature steps to predict
-        :return: None
+        :param y_true: shape [num_test_samples, feature_len]
+        :return predictions: shape [num_test_samples, feature_len]
         '''
 
+        rmse = None
         batchX = np.reshape(x, (1, x.shape[0], x.shape[1]))
         prediction_list = []
 
@@ -194,101 +214,8 @@ class Simple_LSTM():
             batchX = np.delete(batchX, 0, axis=1)
 
         prediction_list = np.array(prediction_list)
-        return prediction_list
-
-
-class LSTMConfig():
-    train_batch_size = 30
-    state_size = 30
-    num_layers = 1
-    input_size = 3
-    output_size = 1
-    time_steps = 50
-    lr = 0.0001
-    num_epochs = 400
-    checkpoint = "checkpoints/with_time_features/simple_lstm.ckpt"
-
-
-if __name__ == "__main__":
-
-    config = LSTMConfig()
-
-    # Build model
-    lstm_model = Simple_LSTM(config)
-
-    #########
-    ## MRT
-    #########
-
-    # Load data
-    data_path = "data/count_by_hour_with_header.csv"
-    data_scaled = reader.get_scaled_mrt_data(data_path, [0], datetime_features=True)
-    train, val, test, test_time_features = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.time_steps,
-                                                   output_seq_len=1)
-    x_train, y_train = train[0], train[1]
-    x_val, y_val, = val[0], val[1]
-    x_test, y_test = test[0], test[1]
-
-    x_val = np.squeeze(x_val, axis=1)
-    x_test = np.squeeze(x_test, axis=1)
-    y_val = np.squeeze(y_val, axis=1)
-    y_test = np.squeeze(y_test, axis=(1, 2))
-
-    test_time_features = np.squeeze(test_time_features, axis=(1, 2))
-
-
-    # Run training
-    # lstm_model.fit(x_train, y_train, x_val, y_val)
-
-    # Make 1-step predictions
-    # predictions = lstm_model.predict(x_test[:, 0, :, :])
-    # plt.plot(predictions[:, 0], label="predictions")
-    # y_true = y_test.reshape((y_test.shape[0], 1))
-    # plt.plot(y_true, label="true values")
-    # plt.legend(loc='upper right')
-    # plt.show()
-
-    # Make multiple-step predictions
-    x_input = x_test[0]
-    predictions = lstm_model.predict_multiple_steps(x_input, test_time_features)
-
-    plt.plot(data_scaled[:, 0], label="all data")
-    plt.plot(range(data_scaled.shape[0]-y_test.shape[0], data_scaled.shape[0]), predictions, label="predictions")
-
-    # plt.plot(predictions, label="predictions")
-    # y_true = y_test[0:predictions.shape[0]]
-    # y_true = np.reshape(y_true, (y_true.shape[0], 1))
-
-    # plt.plot(y_true, label="true values")
-
-    plt.legend(loc='upper right')
-    plt.show()
-
-
-    ############
-    ## Sine data
-    ############
-    # x = np.linspace(0, 120, 420)
-    # data = y = reader.generate_sin_signal(x, noisy=True)
-    # train, val, test = reader.mrt_simple_lstm_data(data, config.train_batch_size, config.time_steps)
-    # x_train, y_train = train[0], train[1]
-    # x_val, y_val, = val[0], val[1]
-    # x_test, y_test = test[0], test[1]
-    # lstm_model.fit(x_train, y_train, x_val, y_val)
-    #
-    # # predictions = lstm_model.predict(x_test)
-    #
-    # x_input = x_test[0, :, :]
-    # predictions = lstm_model.predict_multiple_steps(x_input, y_test.shape[0])
-    # plt.plot(predictions[:, 0], label="predictions")
-    # plt.plot(y_test[:, 0], label="true values")
-    # plt.legend(loc='upper right')
-    # plt.show()
-    #
-    # squared_error = np.square(np.subtract(predictions[:, 0], y_test[:, 0]))
-    # mean_error = np.mean(squared_error)
-    # rmse = np.sqrt(mean_error)
-    #
-    # print(rmse)
+        if y_true is not None:
+            rmse = self._sess.run(self._compute_rmse(y_true, prediction_list))
+        return prediction_list, rmse
 
 
