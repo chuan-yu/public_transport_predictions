@@ -2,16 +2,23 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import os
+import datetime
 
 # Load Data
 file_path="../data/RIDE_DATA_OCT_2016-Bus2-wo-CAN.csv"
 df = pd.DataFrame.from_csv(file_path, index_col=None)
-df = df[df["Direction"]==0]
+df = df[['Bus_Trip_Num', 'Bus_Reg_Num', 'Boarding_stop_stn', 'Ride_start_date', 'Ride_start_time', 'Direction']]
 df['Ride_start_date'] = df['Ride_start_date'].values.astype('datetime64[D]')
+df['Ride_start_time'] = pd.to_datetime(df['Ride_start_time'], format= '%H:%M:%S' ).dt.time
 df['Boarding_stop_stn'] = df['Boarding_stop_stn'].astype("str")
-df['Alighting_stop_stn'] = df['Alighting_stop_stn'].astype('str')
 df['Bus_Reg_Num'] = df['Bus_Reg_Num'].astype('str')
 df['Bus_Trip_Num'] = df['Bus_Trip_Num'].astype('str')
+
+df['id'] = df[['Bus_Reg_Num', 'Bus_Trip_Num']].apply(lambda x: ' '.join(x), axis=1)
+df.drop(['Bus_Reg_Num', 'Bus_Trip_Num'], inplace=True, axis=1)
+
+df = df[df["Direction"]==0]
+df.drop(['Direction'], inplace=True, axis=1)
 
 # Get unique dates
 dates = pd.Series.unique(df["Ride_start_date"])
@@ -33,15 +40,17 @@ for s in stops_raw:
     code_modified = ''.join(char_list)
     stops.append(code_modified)
 
-df_day = df[df['Ride_start_date'] == dates[0]]
-df_day = df[['Bus_Reg_Num', 'Bus_Trip_Num', 'Boarding_stop_stn']]
-df_day['uid'] = df[['Bus_Reg_Num', 'Bus_Trip_Num']].apply(lambda x: ' '.join(x), axis=1)
-df_day.drop(['Bus_Reg_Num', 'Bus_Trip_Num'], inplace=True, axis=1)
+result_table = None
+for date in dates:
+    df_day = df[df['Ride_start_date'] == date]
+    count_table = df_day.groupby(['id', 'Boarding_stop_stn']).size()
+    time_table = df_day.drop_duplicates(['id', 'Boarding_stop_stn'])
+    result_table = pd.merge(count_table.reset_index(name='count'), time_table, left_on=['id', 'Boarding_stop_stn'], right_on=['id', 'Boarding_stop_stn'])
+    result_table = result_table.drop('id', axis=1).sort_values(by=['Boarding_stop_stn', 'Ride_start_time'])
 
-pivot = df_day.pivot_table(index=['uid'], columns='Boarding_stop_stn', aggfunc=len)
-count_table = df_day.groupby(['uid', 'Boarding_stop_stn']).size()
-time = df_day.drop_duplicates(['uid', 'Boarding_stop_stn'])
+    break
 
-new_table = pd.merge(count_table.reset_index(), time, left_on=['uid', 'Boarding_stop_stn'], right_on=['uid', 'Boarding_stop_stn'])
 
-print('Done')
+result_table['Ride_start_datetime'] = result_table[['Ride_start_date','Ride_start_time']].apply(lambda x: datetime.datetime.combine(*list(x)),axis=1)
+result_table.drop(['Ride_start_date','Ride_start_time'], axis=1, inplace=True)
+result_table.pivot(index='Boarding_stop_stn', columns='Ride_start_datetime', values='count')
