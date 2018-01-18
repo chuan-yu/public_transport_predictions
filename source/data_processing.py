@@ -38,7 +38,10 @@ df_day = df[['Bus_Reg_Num', 'Bus_Trip_Num', 'Boarding_stop_stn']]
 df_day['uid'] = df[['Bus_Reg_Num', 'Bus_Trip_Num']].apply(lambda x: ' '.join(x), axis=1)
 df_day.drop(['Bus_Reg_Num', 'Bus_Trip_Num'], inplace=True, axis=1)
 
-pivot = df_day.pivot_table(index=['uid'], columns='Boarding_stop_stn', fill_value=0, aggfunc=len)
-print(pivot)
+pivot = df_day.pivot_table(index=['uid'], columns='Boarding_stop_stn', aggfunc=len)
+count_table = df_day.groupby(['uid', 'Boarding_stop_stn']).size()
+time = df_day.drop_duplicates(['uid', 'Boarding_stop_stn'])
+
+new_table = pd.merge(count_table.reset_index(), time, left_on=['uid', 'Boarding_stop_stn'], right_on=['uid', 'Boarding_stop_stn'])
 
 print('Done')
