@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import xarray as xr
+# import xarray as xr
 import os
 import datetime
 
@@ -54,3 +54,12 @@ for date in dates:
 result_table['Ride_start_datetime'] = result_table[['Ride_start_date','Ride_start_time']].apply(lambda x: datetime.datetime.combine(*list(x)),axis=1)
 result_table.drop(['Ride_start_date','Ride_start_time'], axis=1, inplace=True)
 result_table.pivot(index='Boarding_stop_stn', columns='Ride_start_datetime', values='count')
+
+stops = pd.Series.unique(result_table['Boarding_stop_stn'])
+count_dict = dict()
+
+for s in stops:
+    stop_table = result_table[result_table['Boarding_stop_stn']==s]
+    count_series = pd.Series(stop_table['count'].values, stop_table['Ride_start_datetime'])
+    count_dict[s] = count_series
+
