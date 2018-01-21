@@ -12,18 +12,31 @@ def generate_sin_signal(x, noisy=False):
     return y
 
 
-def _read_raw_data(data_path=None):
+def _read_raw_mrt_data(data_path=None):
     '''Read data from a csv file.
 
     :param data_path: the path of data file.
     :return: pandas data frame of size [time_steps, num_stations].
 
     '''
-
     data = pd.read_csv(data_path, index_col=0)
     data.reset_index(drop=True, inplace=True)
     data = pd.DataFrame.transpose(data)
     return data
+
+
+def _read_raw_bus_data(stops, data_path=None):
+    '''Read data from a csv file.
+    :param stops: a list of strings
+    :param data_path: the path of data file.
+    :return: pandas data frame of size [time_steps, num_stops].
+    '''
+
+    df = pd.read_csv(data_path)
+    df = df.loc[df['Boarding_stop_stn'].isin(stops)]
+    df = df.pivot(index='Ride_start_datetime', columns='Boarding_stop_stn', values='count')
+
+    return df
 
 
 def _scale(data):
@@ -51,7 +64,7 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
     :return: numpy array of size [time_steps, num_stations]
     '''
     # read raw data as pandas Dataframe
-    raw_data = _read_raw_data(data_path)
+    raw_data = _read_raw_mrt_data(data_path)
     if stations_codes is not None:
         raw_data = raw_data[stations_codes]
 
@@ -65,6 +78,27 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
 
     data = raw_data.as_matrix(columns=None)
     data = _scale(data)
+
+    return data
+
+
+def get_scaled_bus_data(stops, data_path=None, datetime_features=False):
+
+    df_raw = _read_raw_bus_data(['84031'], data_path)
+
+    if datetime_features:
+        index = pd.to_datetime(df_raw.index)
+        minutes = np.array(index.minute)
+        hours = np.array(index.hour)
+        day_week = np.array(index.dayofweek)
+        df_raw['day_of_week'] = day_week
+        df_raw['hour'] = hours
+        df_raw['minute'] = minutes
+
+    df_raw[['day_of_week', 'hour', 'minute']] = df_raw[['day_of_week', 'hour', 'minute']].shift(-1)
+    df_raw.drop(df_raw.index[-1], inplace=True)
+    data = df_raw.as_matrix()
+    # data = _scale(data)
 
     return data
 
