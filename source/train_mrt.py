@@ -8,14 +8,13 @@ from matplotlib import pyplot as plt
 class LSTMConfig():
     def __init__(self, station_code):
         self.train_batch_size = 30
-        self.state_size = 30
-        self.num_layers = 1
+        self.state_size = [32, 64, 128]
         self.input_size = 3
         self.output_size = 1
         self.time_steps = 50
-        self.lr = 0.0005
+        self.lr = 0.001
         self.num_epochs = 400
-        self.checkpoint = os.path.join("checkpoints/lstm_without_time_features_lr0.001", str(station_code), "checkpoint.ckpt")
+        self.checkpoint = os.path.join("checkpoints/3_layers(32, 64, 128)", str(station_code), "checkpoint.ckpt")
         self.tensorboard_dir = "summaries/"
 
 
@@ -26,10 +25,8 @@ if __name__ == "__main__":
     ## MRT
     #########
 
-    # stations = [0, 8, 69, 75, 100, 110]
-    stations = [32, 111]
-    # stations =[100]
-
+    # stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
+    stations = [0]
     for s in stations:
 
         config = LSTMConfig(s)
