@@ -57,7 +57,7 @@ class Simple_LSTM():
 
     def _get_lstm_cells(self):
         cell = tf.contrib.rnn.BasicLSTMCell(self.state_size, state_is_tuple=True)
-        cells = tf.contrib.rnn.MultiRNNCell([cell] * self.num_layers)
+        cells = tf.contrib.rnn.MultiRNNCell([cell] * self.num_layers, state_is_tuple=True)
         return cells
 
     def _build_lstm(self):
@@ -69,7 +69,9 @@ class Simple_LSTM():
             init_states = lstm_cells.zero_state(self._batch_size, dtype=tf.float32)
 
             states_series, self._current_state = tf.nn.dynamic_rnn(lstm_cells, self._batchX_placeholder,
-                                                                         initial_state=init_states)
+                                                                   initial_state=init_states,
+                                                                   dtype=tf.float32
+                                                                   )
 
             last_time_step = states_series[:, -1, :]
             self._prediction_series = tf.matmul(last_time_step, self._w_out) + self._b_out

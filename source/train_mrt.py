@@ -9,7 +9,7 @@ class LSTMConfig():
     def __init__(self, station_code):
         self.train_batch_size = 30
         self.state_size = 30
-        self.num_layers = 1
+        self.num_layers = 2
         self.input_size = 3
         self.output_size = 1
         self.time_steps = 50
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     #########
 
     # stations = [0, 8, 69, 75, 100, 110]
-    stations = [32, 111]
+    stations = [0]
     # stations =[100]
 
     for s in stations:
