@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 
 class LSTMConfig():
     def __init__(self, stop_code):
-        self.train_batch_size = 30
+        self.train_batch_size = 120
         self.state_size = 30
         self.num_layers = 1
         self.input_size = 4
@@ -46,4 +46,7 @@ if __name__ == "__main__":
         test_time_features = np.squeeze(test_time_features, axis=(1, 2))
 
         # Run training
-        lstm_model.fit(x_train, y_train, x_val, y_val)
+        # lstm_model.fit(x_train, y_train, x_val, y_val)
+
+        x_input = x_test[0]
+        predictions, rmse = lstm_model.predict_multiple_steps(x_input, test_time_features, y_test)

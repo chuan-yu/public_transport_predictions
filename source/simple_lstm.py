@@ -12,7 +12,6 @@ class Simple_LSTM():
         tf.reset_default_graph()
 
         self.state_size = config.state_size
-        self.num_layers = config.num_layers
         self.input_size = config.input_size
         self.train_batch_size = config.train_batch_size
         self.output_size = config.output_size
@@ -50,14 +49,14 @@ class Simple_LSTM():
 
     def _create_variables(self):
         self._w_out = tf.get_variable("output_weights", dtype=tf.float32,
-                                      initializer=tf.truncated_normal([self.state_size, self.output_size]))
+                                      initializer=tf.truncated_normal([self.state_size[-1], self.output_size]))
         self._b_out = tf.get_variable("output_bias", dtype=tf.float32,
                                       initializer=tf.truncated_normal([1, self.output_size]))
         self._global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
 
     def _get_lstm_cells(self):
-        cell = tf.contrib.rnn.BasicLSTMCell(self.state_size, state_is_tuple=True)
-        cells = tf.contrib.rnn.MultiRNNCell([cell] * self.num_layers, state_is_tuple=True)
+        # cell = tf.contrib.rnn.BasicLSTMCell(self.state_size)
+        cells = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(size) for size in self.state_size])
         return cells
 
     def _build_lstm(self):
@@ -69,9 +68,7 @@ class Simple_LSTM():
             init_states = lstm_cells.zero_state(self._batch_size, dtype=tf.float32)
 
             states_series, self._current_state = tf.nn.dynamic_rnn(lstm_cells, self._batchX_placeholder,
-                                                                   initial_state=init_states,
-                                                                   dtype=tf.float32
-                                                                   )
+                                                                   initial_state=init_states)
 
             last_time_step = states_series[:, -1, :]
             self._prediction_series = tf.matmul(last_time_step, self._w_out) + self._b_out
