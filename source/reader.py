@@ -74,6 +74,7 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
         day_week = np.array(index.dayofweek)
         raw_data['hour'] = hours
         raw_data['day_of_week'] = day_week
+        raw_data['is_work_day'] = raw_data['day_of_week'] // 5 == 1
 
 
     data = raw_data.as_matrix(columns=None)

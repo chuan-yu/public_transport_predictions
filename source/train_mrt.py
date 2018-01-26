@@ -7,14 +7,14 @@ from matplotlib import pyplot as plt
 
 class LSTMConfig():
     def __init__(self, station_code):
-        self.train_batch_size = 30
-        self.state_size = [200, 200]
+        self.train_batch_size = 32
+        self.state_size = [200]
         self.feature_len = 3
         self.output_time_steps = 10
         self.input_time_steps = 50
         self.lr = 0.01
-        self.num_epochs = 600
-        self.keep_prob = 0.5
+        self.num_epochs = 400
+        self.keep_prob = 1.0
         self.checkpoint = os.path.join("checkpoints/3_layers(32, 64, 128)", str(station_code), "checkpoint.ckpt")
         self.tensorboard_dir = "summaries/"
 
