@@ -44,10 +44,12 @@ class Seq2Seq():
 
         self._encoder_inp = tf.placeholder(tf.float32, [self.input_time_steps, None, self.input_size],
                                      name="encoder_input")
+
         _, enc_state = self._build_encoder(self._encoder_inp)
 
         self._decoder_target = tf.placeholder(tf.float32, [self.output_time_steps, None, self.output_size],
                                      name="decoder_target")
+
         go_signal = tf.zeros_like(tf.expand_dims(self._decoder_target[0], 0), dtype=tf.float32, name="GO")
 
         dec_inp = tf.concat([go_signal, self._decoder_target], 0)
@@ -57,8 +59,10 @@ class Seq2Seq():
 
     def _define_loss(self):
         with tf.variable_scope("Loss"):
-            self._loss = tf.reduce_sum(tf.sqrt(tf.reduce_mean(
-                tf.square(tf.subtract(self._model_outputs, self._decoder_target)), 1)))
+            self._loss = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(self._model_outputs, self._decoder_target))))
+
+            # self._loss = tf.reduce_sum(tf.sqrt(tf.reduce_mean(
+            #     tf.square(tf.subtract(self._model_outputs, self._decoder_target)), 0)))
 
     def _define_optimizer(self):
         with tf.variable_scope("Training"):
@@ -116,16 +120,18 @@ class Seq2Seq():
 
             print("step", epoch, "train_loss: ", train_loss)
 
-            if (epoch + 1) % 100 == 0:
+            if (epoch + 1) % 1000 == 0:
                 self._saver.save(self._sess, config.checkpoint, global_step=self._global_step)
 
     def predict(self, x, y):
         predictions = []
+        time_features = x[:, :, :, 1:]
         for i in range(x.shape[0]):
             prediction = self._sess.run(self._model_outputs,
                                         feed_dict={
                                             self._encoder_inp: x[i],
-                                            self._decoder_target: y[i]
+                                            self._decoder_target: y[i],
+                                            self._time_features: time_features[i]
                                         })
             predictions.append(prediction)
 
@@ -134,7 +140,7 @@ class Seq2Seq():
 
 
 class LSTMConfig():
-    train_batch_size = 10
+    train_batch_size = 30
 
     state_size = 32
     num_layers = 1
@@ -143,7 +149,7 @@ class LSTMConfig():
     input_time_steps = 50
     output_time_steps = 20
     lr = 0.01
-    num_epochs = 5000
+    num_epochs = 2000
     checkpoint = "checkpoints/seq2seq/seq2seq.ckpt"
 
 if __name__ == "__main__":
@@ -155,8 +161,8 @@ if __name__ == "__main__":
     # Load data
     data_path = "data/count_by_hour_with_header.csv"
     data_scaled = reader.get_scaled_mrt_data(data_path, [0])
-    train, val, test = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.input_time_steps,
-                                                   config.output_time_steps)
+    train, val, test, _ = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.input_time_steps,
+                                                   config.output_time_steps, time_major=True)
 
     # sin_input = np.linspace(0, 120, 420)
     # sin_data = reader.generate_sin_signal(sin_input)
