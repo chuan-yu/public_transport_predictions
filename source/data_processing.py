@@ -24,7 +24,7 @@ def load_and_pre_process(file, direction):
     df['id'] = df[['Bus_Reg_Num', 'Bus_Trip_Num']].apply(lambda x: ' '.join(x), axis=1)
     df.drop(['Bus_Reg_Num', 'Bus_Trip_Num'], inplace=True, axis=1)
 
-    df = df[df["Direction"] == 0]
+    df = df[df["Direction"] == direction]
     df.drop(['Direction'], inplace=True, axis=1)
 
     return df
@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     SERVICE_NO = '2'
     DATA_FOLDER = 'data/' + SERVICE_NO + '/'
-    RESULT_FOLDER = 'data/result/'
+    RESULT_FOLDER = 'data/stop_boarding_counts/'
     DIRECTION = 0
 
     files = [f for f in listdir(DATA_FOLDER) if isfile(join(DATA_FOLDER, f))]
@@ -80,7 +80,6 @@ if __name__ == "__main__":
     for file in files:
         print("processing ", file)
         month_str = file.split('_')[2]
-        # print(DATA_FOLDER + file)
         df = load_and_pre_process(DATA_FOLDER + file, DIRECTION)
         result_table = group_and_count(df)
         result_file = RESULT_FOLDER +  SERVICE_NO + '_' + month_str + '_' + str(DIRECTION) + '.csv'

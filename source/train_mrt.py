@@ -2,6 +2,7 @@ from simple_lstm import Simple_LSTM
 import reader
 import os
 import numpy as np
+from datetime import datetime
 from matplotlib import pyplot as plt
 
 
@@ -12,17 +13,21 @@ class LSTMConfig():
         self.feature_len = 3
         self.output_time_steps = 10
         self.input_time_steps = 50
-        self.lr = 0.01
+        self.lr = 0.005
         self.num_epochs = 400
         self.keep_prob = 1.0
-        self.checkpoint = os.path.join("checkpoints/3_layers(32, 64, 128)", str(station_code), "checkpoint.ckpt")
-        self.tensorboard_dir = "summaries/"
+        self.lr_decay = 1.0
+        self.checkpoint = os.path.join("checkpoints/mrt_baseline-(200)-lr0.005-no_decay", str(station_code), "checkpoint.ckpt")
+        self.write_summary = False
+        self.tensorboard_dir = "summaries/lr0.01-decay_0.5_50"
 
 
 if __name__ == "__main__":
 
+    # HOLIDAYS = ['2016-03-24']
+    # HOLIDAYS = [datetime.strptime(h, '%Y-%m-%d') for h in HOLIDAYS]
     # stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
-    stations = [0]
+    stations = [110]
     for s in stations:
 
         config = LSTMConfig(s)
@@ -50,7 +55,7 @@ if __name__ == "__main__":
         # test_time_features = np.squeeze(test_time_features, axis=(1, 2))
 
         # Run training
-        lstm_model.fit(x_train, y_train, x_val, y_val)
+        # lstm_model.fit(x_train, y_train, x_val, y_val)
 
         # Make 1-step predictions
         # predictions = lstm_model.predict(x_test[:, 0, :, :])
@@ -64,8 +69,6 @@ if __name__ == "__main__":
         predictions, rmse = lstm_model.predict(x_test, y_test)
 
         print(rmse)
-
-
 
         plt.plot(data_scaled[:, 0], label="true values")
         num_test = round(data_scaled.shape[0] * 0.2)

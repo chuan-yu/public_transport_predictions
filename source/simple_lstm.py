@@ -19,16 +19,18 @@ class Simple_LSTM():
         self.lr = config.lr
         self.epochs = config.num_epochs
         self.keep_prob = config.keep_prob
+        self.lr_decay = config.lr_decay
         self._sess = tf.Session()
         self._val_loss = 0
         self.checkpoint = config.checkpoint
+        self.write_summary = config.write_summary
+        self.tensorboard_dir = config.tensorboard_dir
 
         self._create_placeholders()
         self._create_variables()
         self._build_lstm()
         self._define_loss()
         self._define_optimizer()
-        self._define_summaries()
 
         self._saver = tf.train.Saver()
 
@@ -91,14 +93,9 @@ class Simple_LSTM():
         with tf.variable_scope("Training"):
 
             learning_rate = tf.train.exponential_decay(self.lr, self._global_step,
-                                           100, 0.5, staircase=True)
+                                           50, self.lr_decay, staircase=True)
             self._optimizer = tf.train.AdamOptimizer(learning_rate)
             self._train_step = self._optimizer.minimize(self._total_loss)
-
-    def _define_summaries(self):
-        with tf.name_scope("summaries"):
-            self._train_summary = tf.summary.scalar("train_rmse", self._total_loss)
-            # self._val_summary = tf.summary.scalar("validation_rmse", self._val_loss)
 
     def save_graph(self):
         with tf.Session() as sess:
@@ -108,6 +105,7 @@ class Simple_LSTM():
     def _increment_global_step(self):
         self._sess.run(tf.assign(self._global_step, self._global_step + 1))
 
+
     def fit(self, x_train, y_train, x_val, y_val):
         '''Train the model
         :param x_train: shape [num_batches, batch_size, input_time_steps, feature_len]
@@ -116,7 +114,15 @@ class Simple_LSTM():
         :param y_val: shape [num_val_samples, output_time_steps], batch_size is always 1
         '''
 
-        writer = tf.summary.FileWriter("summaries/")
+
+        if self.write_summary:
+            train_writer = tf.summary.FileWriter(self.tensorboard_dir + "/train")
+            val_writer = tf.summary.FileWriter(self.tensorboard_dir + "/validation")
+            loss = tf.get_variable("loss", shape=(), dtype=tf.float32)
+            tf.summary.scalar("loss", loss)
+            write_op = tf.summary.merge_all()
+
+
         num_batches = x_train.shape[0]
         best_val_loss = 1000
         if self.keep_prob:
@@ -132,8 +138,8 @@ class Simple_LSTM():
             for i in range(num_batches):
                 x = x_train[i]
                 y = y_train[i]
-                train_loss, train_steps, train_summ = self._sess.run(
-                    [self._total_loss, self._train_step, self._train_summary],
+                train_loss, train_steps = self._sess.run(
+                    [self._total_loss, self._train_step],
                     feed_dict={
                         self._batchX_placeholder: x,
                         self._batchY_placeholder: y,
@@ -141,32 +147,21 @@ class Simple_LSTM():
                         self._keep_prob_placeholder: train_keep_prob
                     })
 
-                writer.add_summary(train_summ, global_step=self._sess.run(self._global_step))
+                if self.write_summary:
+                    summ = self._sess.run(write_op, {loss: train_loss})
+                    train_writer.add_summary(summ, global_step=self._sess.run(self._global_step))
+                    train_writer.flush()
 
-            # Evaluate validation loss at the end of each epoch
-            # val_loss_list = []
-            #
-            # for j in range(x_val.shape[0]):
-            #     loss = self._sess.run(self._total_loss,
-            #                               feed_dict={
-            #                                   self._batchX_placeholder: x_val[[j]],
-            #                                   self._batchY_placeholder: y_val[[j]],
-            #                                   self._batch_size: 1
-            #                               })
-            #     val_loss_list.append(loss)
-            #
-            # val_loss = self._sess.run(tf.reduce_mean(val_loss_list))
 
             _, val_loss = self.predict(x_val, y_val)
 
-            summary = tf.Summary(value=[tf.Summary.Value(tag="validation_rmse",
-                                                         simple_value=val_loss)])
-            writer.add_summary(summary, global_step=self._sess.run(self._global_step))
-            writer.flush()
+            if self.write_summary:
+                summ = self._sess.run(write_op, {loss: val_loss})
+                val_writer.add_summary(summ, global_step=self._sess.run(self._global_step))
+                val_writer.flush()
 
-            # print the errors at the end of each epoch
-            print("Step", epoch, "train loss", train_loss, ", val_loss: ", val_loss)
-            # print("Step", epoch, "train loss", total_loss)
+            print("Step", epoch, "train_loss", train_loss, ", val_loss: ", val_loss)
+
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -177,7 +172,9 @@ class Simple_LSTM():
 
                 self._saver.save(self._sess, self.checkpoint, global_step=self._global_step)
 
-        writer.close()
+        if self.write_summary:
+            train_writer.close()
+            val_writer.close()
 
     def predict(self, x, y):
         '''Make predictions

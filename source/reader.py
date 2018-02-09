@@ -69,12 +69,17 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
         raw_data = raw_data[stations_codes]
 
     if datetime_features:
-        index = pd.to_datetime(raw_data.index) + pd.DateOffset(hours=1)
+        raw_data.index = pd.to_datetime(raw_data.index)
+        index = raw_data.index + pd.DateOffset(hours=1)
         hours = np.array(index.hour)
         day_week = np.array(index.dayofweek)
         raw_data['hour'] = hours
         raw_data['day_of_week'] = day_week
-        raw_data['is_work_day'] = raw_data['day_of_week'] // 5 == 1
+        # raw_data['is_workday'] = raw_data['day_of_week'] // 5 == 0
+        # if holidays is not None:
+        #     for h in holidays:
+        #         date = h.date()
+        #         raw_data.ix[(raw_data.index.date==date)&(raw_data.index.hour!=23), 'is_workday'] = False
 
 
     data = raw_data.as_matrix(columns=None)
@@ -83,25 +88,34 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
     return data
 
 
-def get_scaled_bus_data(stops, data_path=None, datetime_features=False):
+def get_scaled_bus_data(stops, data_path=None, resample_freq=None, datetime_features=False):
 
-    df_raw = _read_raw_bus_data(['84031'], data_path)
+    df_raw = _read_raw_bus_data(stops, data_path)
+    df_raw.index = pd.to_datetime(df_raw.index)
+
+    if resample_freq is not None:
+        df_raw = df_raw.resample(resample_freq, how="sum").fillna(0)
 
     if datetime_features:
-        index = pd.to_datetime(df_raw.index)
+        index = df_raw.index
         minutes = np.array(index.minute)
         hours = np.array(index.hour)
         day_week = np.array(index.dayofweek)
         df_raw['day_of_week'] = day_week
         df_raw['hour'] = hours
-        df_raw['minute'] = minutes
+        # df_raw['minute'] = minutes
+        df_raw[['day_of_week', 'hour']] = df_raw[['day_of_week', 'hour']].shift(-1)
 
-    df_raw[['day_of_week', 'hour', 'minute']] = df_raw[['day_of_week', 'hour', 'minute']].shift(-1)
+
     df_raw.drop(df_raw.index[-1], inplace=True)
     data = df_raw.as_matrix()
-    # data = _scale(data)
+    data = _scale(data)
 
     return data
+
+def get_scaled_bus_data_interval(stops, data_path=None, interval=15, datetime_features=False):
+    df_raw = _read_raw_bus_data(stops, data_path)
+
 
 
 def mrt_simple_lstm_data(data, batch_size, truncated_backpro_len,
