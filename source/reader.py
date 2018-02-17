@@ -33,6 +33,7 @@ def _read_raw_bus_data(stops, data_path=None):
     '''
 
     df = pd.read_csv(data_path)
+    df.drop_duplicates(['Boarding_stop_stn', 'Ride_start_datetime'], keep='first', inplace=True)
     df = df.loc[df['Boarding_stop_stn'].isin(stops)]
     df = df.pivot(index='Ride_start_datetime', columns='Boarding_stop_stn', values='count')
 
@@ -103,8 +104,8 @@ def get_scaled_bus_data(stops, data_path=None, resample_freq=None, datetime_feat
         day_week = np.array(index.dayofweek)
         df_raw['day_of_week'] = day_week
         df_raw['hour'] = hours
-        # df_raw['minute'] = minutes
-        df_raw[['day_of_week', 'hour']] = df_raw[['day_of_week', 'hour']].shift(-1)
+        df_raw['minute'] = minutes
+        df_raw[['day_of_week', 'hour', 'minute']] = df_raw[['day_of_week', 'hour', 'minute']].shift(-1)
 
 
     df_raw.drop(df_raw.index[-1], inplace=True)
@@ -112,11 +113,6 @@ def get_scaled_bus_data(stops, data_path=None, resample_freq=None, datetime_feat
     data = _scale(data)
 
     return data
-
-def get_scaled_bus_data_interval(stops, data_path=None, interval=15, datetime_features=False):
-    df_raw = _read_raw_bus_data(stops, data_path)
-
-
 
 def mrt_simple_lstm_data(data, batch_size, truncated_backpro_len,
                          train_ratio=0.6, val_ratio=0.2):
@@ -168,6 +164,9 @@ def mrt_simple_lstm_data(data, batch_size, truncated_backpro_len,
     train = np.reshape(train, (-1, batch_size, train.shape[1], train.shape[2]))
     x_train = train[:, :, :-1, :]
     y_train = train[:, :, -1, :]
+
+    num_val_batches = num_val // batch_size
+    val = val[0:num_val_batches * batch_size, :, :]
 
     x_val = val[:, :-1, :]
     y_val = val[:, -1, :]

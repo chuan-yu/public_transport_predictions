@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    file = 'data/stop_boarding_counts/bus_no_2/2APR_0.csv'
+    file = 'data/stop_boarding_counts/bus_no_2/2-2017APR_0.csv'
     df = reader.get_scaled_bus_data(['84031'], file, '30T', False)
     plt.plot(df)
     plt.show()

@@ -58,6 +58,7 @@ class Simple_LSTM():
         self._b_out = tf.get_variable("output_bias", dtype=tf.float32,
                                       initializer=tf.truncated_normal([1, self.output_time_steps]))
         self._global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
+        self._best_val_loss = tf.Variable(100, dtype=tf.float32, trainable=False, name="best_val_loss")
 
     def _get_lstm_cells(self):
         # cell = tf.contrib.rnn.BasicLSTMCell(self.state_size)
@@ -72,10 +73,10 @@ class Simple_LSTM():
             lstm_cells = self._get_lstm_cells()
 
             # Zero initial state
-            init_states = lstm_cells.zero_state(self._batch_size, dtype=tf.float32)
+            # init_states = lstm_cells.zero_state(None, dtype=tf.float32)
 
             states_series, self._current_state = tf.nn.dynamic_rnn(lstm_cells, self._batchX_placeholder,
-                                                                   initial_state=init_states)
+                                                                   dtype=tf.float32)
 
             last_time_step = states_series[:, -1, :]
 
@@ -122,9 +123,8 @@ class Simple_LSTM():
             tf.summary.scalar("loss", loss)
             write_op = tf.summary.merge_all()
 
-
         num_batches = x_train.shape[0]
-        best_val_loss = 1000
+
         if self.keep_prob:
             train_keep_prob = self.keep_prob
         else:
@@ -163,8 +163,8 @@ class Simple_LSTM():
             print("Step", epoch, "train_loss", train_loss, ", val_loss: ", val_loss)
 
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
+            if val_loss < self._sess.run(self._best_val_loss):
+                self._sess.run(self._best_val_loss.assign(val_loss))
                 print("Achieved better val_loss. Saving model...")
 
                 if not os.path.exists(os.path.dirname(self.checkpoint)):
@@ -204,7 +204,7 @@ class Simple_LSTM():
 
 
     def predict_multiple_steps(self, x, time_features, y_true=None):
-        '''Make multipel-steps predictions
+        '''Make multiple-steps predictions
         :param x: shape [time_step, feature_len], only input one sample
         :param num_steps: the number of feature steps to predict
         :param y_true: shape [num_test_samples, feature_len]
@@ -216,12 +216,13 @@ class Simple_LSTM():
         prediction_list = []
 
         num_steps = time_features.shape[0]
+        batch_size = x.shape[1]
 
         for j in range(num_steps):
             predictions = self._sess.run(self._prediction_series,
                                                         feed_dict={
                                                             self._batchX_placeholder: batchX,
-                                                            self._batch_size: 1
+                                                            self._batch_size: batch_size
                                                         })
 
             result = predictions.reshape(predictions.shape[1])
