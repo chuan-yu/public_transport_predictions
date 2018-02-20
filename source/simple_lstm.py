@@ -27,8 +27,7 @@ class Simple_LSTM():
         self.tensorboard_dir = config.tensorboard_dir
 
         self._create_placeholders()
-        self._create_variables()
-        self._build_lstm()
+        self._build_model()
         self._define_loss()
         self._define_optimizer()
 
@@ -52,14 +51,6 @@ class Simple_LSTM():
 
         self._keep_prob_placeholder = tf.placeholder_with_default(1.0, shape=())
 
-    def _create_variables(self):
-        self._w_out = tf.get_variable("output_weights", dtype=tf.float32,
-                                      initializer=tf.truncated_normal([self.state_size[-1], self.output_time_steps]))
-        self._b_out = tf.get_variable("output_bias", dtype=tf.float32,
-                                      initializer=tf.truncated_normal([1, self.output_time_steps]))
-        self._global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
-        self._best_val_loss = tf.Variable(100, dtype=tf.float32, trainable=False, name="best_val_loss")
-
     def _get_lstm_cells(self):
         # cell = tf.contrib.rnn.BasicLSTMCell(self.state_size)
         cells = [tf.contrib.rnn.DropoutWrapper(tf.nn.rnn_cell.LSTMCell(size), output_keep_prob=self._keep_prob_placeholder)
@@ -67,7 +58,16 @@ class Simple_LSTM():
         cells = tf.contrib.rnn.MultiRNNCell(cells)
         return cells
 
-    def _build_lstm(self):
+    def _build_model(self):
+
+        self._w_out = tf.get_variable("output_weights", dtype=tf.float32,
+                                      initializer=tf.truncated_normal([self.state_size[-1], self.output_time_steps]))
+        self._b_out = tf.get_variable("output_bias", dtype=tf.float32,
+                                      initializer=tf.truncated_normal([1, self.output_time_steps]))
+        self._global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
+        self._best_val_loss = tf.Variable(100, dtype=tf.float32, trainable=False, name="best_val_loss")
+
+
         with tf.variable_scope("LSTM"):
 
             lstm_cells = self._get_lstm_cells()

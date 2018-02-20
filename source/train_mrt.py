@@ -1,4 +1,5 @@
 from simple_lstm import Simple_LSTM
+from seq2seq import Seq2Seq
 import reader
 import os
 import numpy as np
@@ -17,7 +18,7 @@ class LSTMConfig():
         self.num_epochs = 400
         self.keep_prob = 1.0
         self.lr_decay = 1.0
-        self.checkpoint = os.path.join("checkpoints/mrt_baseline-(200)-lr0.005-no_decay", str(station_code), "checkpoint.ckpt")
+        self.checkpoint = os.path.join("checkpoints/test/mrt_baseline-(200)-lr0.005-no_decay", str(station_code), "checkpoint.ckpt")
         self.write_summary = False
         self.tensorboard_dir = "summaries/lr0.01-decay_0.5_50"
 
@@ -55,7 +56,7 @@ if __name__ == "__main__":
         # test_time_features = np.squeeze(test_time_features, axis=(1, 2))
 
         # Run training
-        # lstm_model.fit(x_train, y_train, x_val, y_val)
+        lstm_model.fit(x_train, y_train, x_val, y_val)
 
         # Make 1-step predictions
         # predictions = lstm_model.predict(x_test[:, 0, :, :])
@@ -66,17 +67,17 @@ if __name__ == "__main__":
         # plt.show()
 
         # Make multiple-step predictions
-        predictions, rmse = lstm_model.predict(x_test, y_test)
-
-        print(rmse)
-
-        plt.plot(data_scaled[:, 0], label="true values")
-        num_test = round(data_scaled.shape[0] * 0.2)
-        plt.plot(range(data_scaled.shape[0]-num_test, data_scaled.shape[0]-num_test+predictions.size), predictions, label="predictions")
-        plt.axvline(x=data_scaled.shape[0]-num_test, color='green', linestyle='--')
-        # plt.title("STN Admiralty")
-        plt.legend(loc='upper right')
-        plt.show()
+        # predictions, rmse = lstm_model.predict(x_test, y_test)
+        #
+        # print(rmse)
+        #
+        # plt.plot(data_scaled[:, 0], label="true values")
+        # num_test = round(data_scaled.shape[0] * 0.2)
+        # plt.plot(range(data_scaled.shape[0]-num_test, data_scaled.shape[0]-num_test+predictions.size), predictions, label="predictions")
+        # plt.axvline(x=data_scaled.shape[0]-num_test, color='green', linestyle='--')
+        # # plt.title("STN Admiralty")
+        # plt.legend(loc='upper right')
+        # plt.show()
 
 
     ############
