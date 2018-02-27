@@ -52,11 +52,11 @@ class Simple_LSTM():
         self._keep_prob_placeholder = tf.placeholder_with_default(1.0, shape=())
 
     def _get_lstm_cells(self):
-        # cell = tf.contrib.rnn.BasicLSTMCell(self.state_size)
-        cells = [tf.contrib.rnn.DropoutWrapper(tf.nn.rnn_cell.LSTMCell(size), output_keep_prob=self._keep_prob_placeholder)
-                 for size in self.state_size]
-        cells = tf.contrib.rnn.MultiRNNCell(cells)
-        return cells
+        with tf.variable_scope('lstm_cells'):
+            cells = [tf.contrib.rnn.DropoutWrapper(tf.nn.rnn_cell.LSTMCell(size), output_keep_prob=self._keep_prob_placeholder)
+                     for size in self.state_size]
+            cells = tf.contrib.rnn.MultiRNNCell(cells)
+            return cells
 
     def _build_model(self):
 
@@ -143,7 +143,6 @@ class Simple_LSTM():
                     feed_dict={
                         self._batchX_placeholder: x,
                         self._batchY_placeholder: y,
-                        self._batch_size: self.train_batch_size,
                         self._keep_prob_placeholder: train_keep_prob
                     })
 
@@ -188,7 +187,6 @@ class Simple_LSTM():
             predictions, loss = self._sess.run([self._prediction_series, self._total_loss],
                                          feed_dict={
                                              self._batchX_placeholder: x[[i]],
-                                             self._batch_size: 1,
                                              self._batchY_placeholder: y[[i]]
 
                                          })
