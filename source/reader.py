@@ -309,7 +309,17 @@ def _convert_to_windows(data, total_seq_len, train=True, output_seq_len=1):
     return time_windows
 
 
+def get_pretrain_data(data, batch_size, time_steps):
+    x = data[:-1]
+    y = data[1:, 0]
 
+    n = x.shape[0] // (batch_size * time_steps)
+    x = x[0:n * batch_size * time_steps]
+    y = y[0:n * batch_size * time_steps]
 
+    x = x.reshape((-1, time_steps, batch_size, x.shape[1]))
+    y = y.reshape((-1, time_steps, batch_size, 1))
+
+    return x, y
 
 

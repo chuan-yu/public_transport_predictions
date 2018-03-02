@@ -13,8 +13,22 @@ class Seq2Seq(Simple_LSTM):
         self._input_size = config.input_size
         self._output_size = config.output_size
         super().__init__(config)
+        self._sess.run(tf.global_variables_initializer())
+
+        encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
+        pretrain_saver = tf.train.Saver(encoder_vars)
+
+        encoder_ckpt = tf.train.get_checkpoint_state(os.path.dirname("checkpoints/pretrain/pretrain.ckpt"))
+        if encoder_ckpt and encoder_ckpt.model_checkpoint_path:
+            print("restoring pretrained encoder")
+            pretrain_saver.restore(self._sess, encoder_ckpt.model_checkpoint_path)
+
 
     def _create_placeholders(self):
+
+        # self._x_pretrain = tf.placeholder(tf.float32, [self.input_time_steps, None, self.feature_len])
+        self._y_pretrain = tf.placeholder(tf.float32, [self.input_time_steps, None, 1])
+
         self._batchX_placeholder = tf.placeholder(tf.float32, [self.input_time_steps, None, self._input_size],
                                                   name="encoder_input")
         self._batchY_placeholder = tf.placeholder(tf.float32, [self.output_time_steps, None, self._output_size],
@@ -26,7 +40,7 @@ class Seq2Seq(Simple_LSTM):
         self._global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
         self._best_val_loss = tf.Variable(100, dtype=tf.float32, trainable=False, name="best_val_loss")
 
-        _, enc_state = self._build_encoder(self._batchX_placeholder)
+        self._encoder_outputs, enc_state = self._build_encoder(self._batchX_placeholder)
 
         with tf.variable_scope("decoder_inputs"):
             go_signal = tf.expand_dims(tf.fill(tf.shape(self._batchY_placeholder[0]), 2.0), 0)
@@ -46,6 +60,14 @@ class Seq2Seq(Simple_LSTM):
             encoder_cells = self._get_lstm_cells()
             encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cells, enc_inp,
                                                                time_major=True, dtype=tf.float32)
+            self._w_encoder_out = tf.get_variable("encoder_output_weights", dtype=tf.float32,
+                                                  initializer=tf.truncated_normal(([self.state_size[-1], self._output_size])))
+            self._b_encoder_out = tf.get_variable("encoder_output_biases", dtype=tf.float32,
+                                                  initializer=tf.truncated_normal([1, self._output_size]))
+
+            encoder_outputs = tf.reshape(encoder_outputs, [-1, self.state_size[-1]])
+            encoder_outputs = tf.matmul(encoder_outputs, self._w_encoder_out) + self._b_encoder_out
+            encoder_outputs = tf.reshape(encoder_outputs, [self.input_time_steps, -1, self._output_size])
         return encoder_outputs, encoder_state
 
 
@@ -91,6 +113,52 @@ class Seq2Seq(Simple_LSTM):
         outputs = tf.matmul(prev, self._w_out) + self._b_out
         current_inp = tf.concat([outputs, current_features], axis=1)
         return tf.matmul(current_inp, self._w_dec_inp) + self._b_dec_inp
+
+
+    # def _define_optimizer(self):
+    #     with tf.variable_scope("Training"):
+    #         self._optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+    #         gvs = self._optimizer.compute_gradients(self._total_loss)
+    #         capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+    #         self._train_step = self._optimizer.apply_gradients(capped_gvs)
+    #
+    #         # params = tf.trainable_variables()
+    #         # gradients = tf.gradients(self._total_loss, params)
+    #         # clipped_gradients, _ = tf.clip_by_global_norm(gradients, 5)
+    #         # learning_rate = tf.train.exponential_decay(self.lr, self._global_step,
+    #         #                                            50, self.lr_decay, staircase=True)
+    #         # self._optimizer = tf.train.AdamOptimizer(learning_rate)
+    #         # self._train_step = self._optimizer.apply_gradients(zip(clipped_gradients, params))
+
+
+    def pretrain_encoder(self, x, y, lr, epochs):
+        encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
+        saver = tf.train.Saver(encoder_vars)
+
+        with tf.variable_scope("pretrain_loss"):
+            pretrain_loss = self._compute_rmse(self._y_pretrain, self._encoder_outputs)
+
+        with tf.variable_scope("pre_training"):
+            pretrain_optimizer = tf.train.AdamOptimizer(lr)
+            pretrain_step = pretrain_optimizer.minimize(pretrain_loss)
+
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            n_batches = x.shape[0]
+            for epoch in range(epochs):
+                for i in range(n_batches):
+                    loss, _ = sess.run([pretrain_loss, pretrain_step],
+                                       feed_dict={
+                                           self._batchX_placeholder: x[i],
+                                           self._y_pretrain: y[i]
+                                       })
+                    print("train_loss: ", str(loss))
+
+                if epoch == epochs - 1:
+                    print("saving pretrained encoder")
+                    saver.save(sess, "checkpoints/pretrain/pretrain.ckpt")
+
+
 
     def fit(self, x_train, targets_train, features_train, x_val, targets_val, features_val):
 
@@ -190,6 +258,13 @@ if __name__ == "__main__":
         # Load data
         data_path = "data/count_by_hour_with_header.csv"
         data_scaled = reader.get_scaled_mrt_data(data_path, [s], datetime_features=True)
+
+        n = data_scaled.shape[0]
+        x_pretrain, y_pretrain = reader.get_pretrain_data(data_scaled[0:round(0.6 * n)],
+                                                          3, config.input_time_steps)
+
+        model.pretrain_encoder(x_pretrain, y_pretrain, 0.0005, 2000)
+        model = Seq2Seq(config, False)
         train, val, test = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.input_time_steps,
                                                           config.output_time_steps, time_major=True, y_has_features=True)
         x_train, y_train = train[0], train[1]
