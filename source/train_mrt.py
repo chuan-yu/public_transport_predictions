@@ -5,30 +5,15 @@ import os
 import numpy as np
 from datetime import datetime
 from matplotlib import pyplot as plt
-
-
-class LSTMConfig():
-    def __init__(self, station_code):
-        self.train_batch_size = 32
-        self.state_size = [200]
-        self.feature_len = 3
-        self.output_time_steps = 10
-        self.input_time_steps = 50
-        self.lr = 0.005
-        self.num_epochs = 400
-        self.keep_prob = 1.0
-        self.lr_decay = 1.0
-        self.checkpoint = os.path.join("checkpoints/test/mrt_baseline-(200)-lr0.005-no_decay", str(station_code), "checkpoint.ckpt")
-        self.write_summary = False
-        self.tensorboard_dir = "summaries/lr0.01-decay_0.5_50"
+from configs.configs import LSTMConfig
 
 
 if __name__ == "__main__":
 
-    # HOLIDAYS = ['2016-03-24']
+    HOLIDAYS = ['2016-03-25']
     # HOLIDAYS = [datetime.strptime(h, '%Y-%m-%d') for h in HOLIDAYS]
     # stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
-    stations = [110]
+    stations = [0]
     for s in stations:
 
         config = LSTMConfig(s)
@@ -38,11 +23,11 @@ if __name__ == "__main__":
 
         # Load data
         data_path = "data/count_by_hour_with_header.csv"
-        data_scaled = reader.get_scaled_mrt_data(data_path, [s], datetime_features=True)
-        train, val, test, test_time_features = reader.produce_seq2seq_data(data_scaled,
-                                                                           batch_size=config.train_batch_size,
-                                                                           input_seq_len=config.input_time_steps,
-                                                                           output_seq_len=config.output_time_steps)
+        data_scaled = reader.get_scaled_mrt_data(data_path, [s], datetime_features=True, holidays=HOLIDAYS)
+        train, val, test = reader.produce_seq2seq_data(data_scaled,
+                                                       batch_size=config.train_batch_size,
+                                                       input_seq_len=config.input_time_steps,
+                                                       output_seq_len=config.output_time_steps)
         x_train, y_train = train[0], train[1]
         x_val, y_val, = val[0], val[1]
         x_test, y_test = test[0], test[1]
@@ -67,10 +52,10 @@ if __name__ == "__main__":
         # plt.show()
 
         # Make multiple-step predictions
-        # predictions, rmse = lstm_model.predict(x_test, y_test)
-        #
-        # print(rmse)
-        #
+        predictions, rmse = lstm_model.predict(x_test, y_test)
+
+        print(rmse)
+
         # plt.plot(data_scaled[:, 0], label="true values")
         # num_test = round(data_scaled.shape[0] * 0.2)
         # plt.plot(range(data_scaled.shape[0]-num_test, data_scaled.shape[0]-num_test+predictions.size), predictions, label="predictions")

@@ -15,13 +15,13 @@ class Seq2Seq(Simple_LSTM):
         super().__init__(config)
         self._sess.run(tf.global_variables_initializer())
 
-        encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
-        pretrain_saver = tf.train.Saver(encoder_vars)
-
-        encoder_ckpt = tf.train.get_checkpoint_state(os.path.dirname("checkpoints/pretrain/pretrain.ckpt"))
-        if encoder_ckpt and encoder_ckpt.model_checkpoint_path:
-            print("restoring pretrained encoder")
-            pretrain_saver.restore(self._sess, encoder_ckpt.model_checkpoint_path)
+        # encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
+        # pretrain_saver = tf.train.Saver(encoder_vars)
+        #
+        # encoder_ckpt = tf.train.get_checkpoint_state(os.path.dirname("checkpoints/pretrain/pretrain.ckpt"))
+        # if encoder_ckpt and encoder_ckpt.model_checkpoint_path:
+        #     print("restoring pretrained encoder")
+        #     pretrain_saver.restore(self._sess, encoder_ckpt.model_checkpoint_path)
 
 
     def _create_placeholders(self):
@@ -251,20 +251,22 @@ if __name__ == "__main__":
     # stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
     stations = [0]
 
+    HOLIDAYS = ['2016-03-25']
+
     for s in stations:
         config = Seq2SeqConfig(s)
         model = Seq2Seq(config, False)
 
         # Load data
         data_path = "data/count_by_hour_with_header.csv"
-        data_scaled = reader.get_scaled_mrt_data(data_path, [s], datetime_features=True)
+        data_scaled = reader.get_scaled_mrt_data(data_path, [s], datetime_features=True, holidays=HOLIDAYS)
 
         n = data_scaled.shape[0]
         x_pretrain, y_pretrain = reader.get_pretrain_data(data_scaled[0:round(0.6 * n)],
                                                           3, config.input_time_steps)
 
-        model.pretrain_encoder(x_pretrain, y_pretrain, 0.0005, 2000)
-        model = Seq2Seq(config, False)
+        # model.pretrain_encoder(x_pretrain, y_pretrain, 0.0005, 2000)
+        # model = Seq2Seq(config, False)
         train, val, test = reader.produce_seq2seq_data(data_scaled, config.train_batch_size, config.input_time_steps,
                                                           config.output_time_steps, time_major=True, y_has_features=True)
         x_train, y_train = train[0], train[1]
@@ -281,11 +283,11 @@ if __name__ == "__main__":
         features_test = y_test[:, :, :, 1:]
 
 
-        model.fit(x_train, targets_train, features_train, x_val, targets_val, features_val)
+        # model.fit(x_train, targets_train, features_train, x_val, targets_val, features_val)
 
-        # model = Seq2Seq(config, True)
-        # predictions, rmse = model.predict(x_test, targets_test, features_test)
-        # print(rmse)
+        model = Seq2Seq(config, True)
+        predictions, rmse = model.predict(x_test, targets_test, features_test)
+        print(rmse)
         #
         # plt.plot(data_scaled[:, 0], label="true values")
         # num_test = round(data_scaled.shape[0] * 0.2)

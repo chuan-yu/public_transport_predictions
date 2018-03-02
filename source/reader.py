@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 
 def generate_sin_signal(x, noisy=False):
@@ -57,7 +58,7 @@ def _scale(data):
     data = np.divide(data, minmax_range)
     return data
 
-def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=False):
+def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=False, holidays=None):
     ''' Get scaled mrt data
 
     :param stations_codes: a list of selected station codes. If None, return data for all stations
@@ -76,12 +77,16 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
         day_week = np.array(index.dayofweek)
         raw_data['hour'] = hours
         raw_data['day_of_week'] = day_week
-        # raw_data['is_workday'] = raw_data['day_of_week'] // 5 == 0
-        # if holidays is not None:
-        #     for h in holidays:
-        #         date = h.date()
-        #         raw_data.ix[(raw_data.index.date==date)&(raw_data.index.hour!=23), 'is_workday'] = False
+        raw_data['dt'] = index.date
+        raw_data['is_workday'] = raw_data['day_of_week'] // 5 == 0
+        if holidays is not None:
+            holidays = [datetime.strptime(h, '%Y-%m-%d') for h in holidays]
+            for h in holidays:
+                date = h.date()
+                raw_data.ix[(raw_data['dt']==date), 'is_workday'] = False
 
+        raw_data['is_workday'] = raw_data['is_workday'].astype(int)
+        raw_data.drop(['dt'], axis=1, inplace=True)
 
     data = raw_data.as_matrix(columns=None)
     data = _scale(data)
@@ -224,6 +229,10 @@ def produce_seq2seq_data(data, batch_size, input_seq_len, output_seq_len,
     total_seq_len = input_seq_len + output_seq_len
 
     train_window = _convert_to_windows(train_raw, total_seq_len)
+    np.random.seed(10)
+    shuffle_indices = np.random.permutation(np.arange(train_window.shape[0]))
+    train_window = train_window[shuffle_indices]
+
     val_window = _convert_to_windows(val_raw, total_seq_len, False, output_seq_len)
     test_window = _convert_to_windows(test_raw, total_seq_len, False, output_seq_len)
 
