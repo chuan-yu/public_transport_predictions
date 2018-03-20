@@ -8,13 +8,11 @@ from configs.configs import Seq2SeqConfig
 
 class Seq2Seq(Simple_LSTM):
 
-    def __init__(self, config, inference=False):
-        self._inference = inference
+    def __init__(self, config):
         self._input_size = config.input_size
         self._output_size = config.output_size
         super().__init__(config)
-        self._sess.run(tf.global_variables_initializer())
-
+        #
         # encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
         # pretrain_saver = tf.train.Saver(encoder_vars)
         #
@@ -26,7 +24,8 @@ class Seq2Seq(Simple_LSTM):
 
     def _create_placeholders(self):
 
-        # self._x_pretrain = tf.placeholder(tf.float32, [self.input_time_steps, None, self.feature_len])
+        self._inference = tf.placeholder_with_default(False, shape=(), name="is_inferencing")
+
         self._y_pretrain = tf.placeholder(tf.float32, [self.input_time_steps, None, 1])
 
         self._batchX_placeholder = tf.placeholder(tf.float32, [self.input_time_steps, None, self._input_size],
@@ -48,10 +47,27 @@ class Seq2Seq(Simple_LSTM):
             dec_inp = tf.concat([go_signal, self._batchY_placeholder[:-1]], 0)
             dec_inp = tf.concat([dec_inp, self._decoder_features], axis=2)
 
-        if not self._inference:
-            dec_out = self._build_decoder(dec_inp, enc_state, False)
-        else:
-            dec_out = self._build_decoder(dec_inp, enc_state, True, features=self._decoder_features)
+
+        self._w_out = tf.get_variable("output_weights", dtype=tf.float32, shape=[self.state_size[-1], self._output_size],
+                                      initializer=tf.contrib.layers.xavier_initializer())
+        self._b_out = tf.get_variable("output_bias", dtype=tf.float32, shape=[1, self._output_size],
+                                      initializer=tf.contrib.layers.xavier_initializer())
+        self._w_dec_inp = tf.get_variable("decoder_input_weights", dtype=tf.float32, shape=[self._input_size, self._input_size],
+                                          initializer=tf.contrib.layers.xavier_initializer())
+        self._b_dec_inp = tf.get_variable("decoder_input_bias", dtype=tf.float32, shape=[self._input_size],
+                                          initializer=tf.contrib.layers.xavier_initializer())
+
+
+        dec_out = self._build_decoder(dec_inp, enc_state, self._inference, self._decoder_features)
+        # dec_out = tf.cond(tf.equal(self._inference, tf.constant(True)),
+        #                   lambda: self._build_decoder_inference(dec_inp, enc_state, self._decoder_features),
+        #                   lambda: self._build_decoder_train(dec_inp, enc_state))
+
+
+        # if not self._inference:
+        #     dec_out = self._build_decoder(dec_inp, enc_state, False)
+        # else:
+        #     dec_out = self._build_decoder(dec_inp, enc_state, True, features=self._decoder_features)
 
         self._prediction_series = [tf.matmul(out, self._w_out) + self._b_out for out in dec_out]
 
@@ -61,29 +77,32 @@ class Seq2Seq(Simple_LSTM):
             encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cells, enc_inp,
                                                                time_major=True, dtype=tf.float32)
             self._w_encoder_out = tf.get_variable("encoder_output_weights", dtype=tf.float32,
-                                                  initializer=tf.truncated_normal(([self.state_size[-1], self._output_size])))
+                                                  shape=[self.state_size[-1], self._output_size],
+                                                  initializer=tf.contrib.layers.xavier_initializer())
             self._b_encoder_out = tf.get_variable("encoder_output_biases", dtype=tf.float32,
-                                                  initializer=tf.truncated_normal([1, self._output_size]))
+                                                  shape=[1, self._output_size],
+                                                  initializer=tf.contrib.layers.xavier_initializer())
 
             encoder_outputs = tf.reshape(encoder_outputs, [-1, self.state_size[-1]])
             encoder_outputs = tf.matmul(encoder_outputs, self._w_encoder_out) + self._b_encoder_out
             encoder_outputs = tf.reshape(encoder_outputs, [self.input_time_steps, -1, self._output_size])
         return encoder_outputs, encoder_state
 
-
     def _build_decoder(self, dec_inp, init_state, inference=False, features=None):
-        if inference and features is None:
-            raise ValueError("when inference is True, features cannot be None")
 
         with tf.variable_scope("decoder"):
             self._w_out = tf.get_variable("output_weights", dtype=tf.float32,
-                                            initializer=tf.truncated_normal([self.state_size[-1], self._output_size]))
+                                          shape=[self.state_size[-1], self._output_size],
+                                            initializer=tf.contrib.layers.xavier_initializer())
             self._b_out = tf.get_variable("output_bias", dtype=tf.float32,
-                                    initializer=tf.truncated_normal([1, self._output_size]))
+                                          shape=[1, self._output_size],
+                                          initializer=tf.contrib.layers.xavier_initializer())
             self._w_dec_inp = tf.get_variable("decoder_input_weights", dtype=tf.float32,
-                                              initializer=tf.truncated_normal([self._input_size, self._input_size]))
+                                              shape=[self._input_size, self._input_size],
+                                              initializer=tf.contrib.layers.xavier_initializer())
             self._b_dec_inp = tf.get_variable("decoder_input_bias", dtype=tf.float32,
-                                              initializer=tf.truncated_normal([self._input_size]))
+                                              shape=[self._input_size],
+                                              initializer=tf.contrib.layers.xavier_initializer())
 
             cell = self._get_lstm_cells()
 
@@ -92,24 +111,39 @@ class Seq2Seq(Simple_LSTM):
             prev = None
             for i in range(self.output_time_steps):
                 inp = dec_inp[i]
-                if inference and prev is not None:
-                    with tf.variable_scope("loop_function", reuse=True):
-                        inp = self._loop_function(prev, features[i])
-                else:
-                    inp = tf.matmul(inp, self._w_dec_inp) + self._b_dec_inp
+
+                inp = tf.cond(tf.logical_and(tf.equal(inference, tf.constant(True)), prev is not None),
+                              lambda: self._loop_function(prev, features[i]),
+                              lambda: tf.matmul(inp, self._w_dec_inp) + self._b_dec_inp)
+
+                inp = tf.reshape(inp, [-1, self._input_size])
+
+                # if inference and prev is not None:
+                #     with tf.variable_scope("loop_function", reuse=True):
+                #         inp = self._loop_function(prev, features[i])
+                # else:
+                #     inp = tf.matmul(inp, self._w_dec_inp) + self._b_dec_inp
 
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
 
                 output, state = cell(inp, state)
                 outputs.append(output)
-                if inference:
-                    prev = output
+                # if tf.equal(inference, tf.constant(True)):
+                #     prev = output
+
+                prev = tf.cond(tf.equal(inference, tf.constant(True)), lambda: output, lambda: 0.0)
+
+                # if inference:
+                #     prev = output
 
         return outputs
 
 
     def _loop_function(self, prev, current_features):
+        if prev is None:
+            return 0.00
+
         outputs = tf.matmul(prev, self._w_out) + self._b_out
         current_inp = tf.concat([outputs, current_features], axis=1)
         return tf.matmul(current_inp, self._w_dec_inp) + self._b_dec_inp
@@ -235,7 +269,8 @@ class Seq2Seq(Simple_LSTM):
                                                feed_dict={
                                                    self._batchX_placeholder: x[i],
                                                    self._batchY_placeholder: targets[i],
-                                                   self._decoder_features: features[i]
+                                                   self._decoder_features: features[i],
+                                                   self._inference: True
                                                })
             prediction_array.append(predictions)
             loss_array.append(loss)
@@ -248,14 +283,15 @@ class Seq2Seq(Simple_LSTM):
         return prediction_array, rmse
 
 if __name__ == "__main__":
-    # stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
-    stations = [0]
+    stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
+    # stations = [0]
 
-    HOLIDAYS = ['2016-03-25']
+    HOLIDAYS = None #['2016-03-25']
 
     for s in stations:
+        print("station %i..." % s)
         config = Seq2SeqConfig(s)
-        model = Seq2Seq(config, False)
+        model = Seq2Seq(config)
 
         # Load data
         data_path = "data/count_by_hour_with_header.csv"
@@ -283,9 +319,8 @@ if __name__ == "__main__":
         features_test = y_test[:, :, :, 1:]
 
 
-        # model.fit(x_train, targets_train, features_train, x_val, targets_val, features_val)
-
-        model = Seq2Seq(config, True)
+        model.fit(x_train, targets_train, features_train, x_val, targets_val, features_val)
+        #
         predictions, rmse = model.predict(x_test, targets_test, features_test)
         print(rmse)
         #

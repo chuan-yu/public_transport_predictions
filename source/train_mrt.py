@@ -10,10 +10,10 @@ from configs.configs import LSTMConfig
 
 if __name__ == "__main__":
 
-    HOLIDAYS = ['2016-03-25']
+    HOLIDAYS = None #['2016-03-25']
     # HOLIDAYS = [datetime.strptime(h, '%Y-%m-%d') for h in HOLIDAYS]
-    # stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
-    stations = [0]
+    stations = [0, 8, 27, 32, 69, 75, 100, 110, 111]
+    # stations = [0]
     for s in stations:
 
         config = LSTMConfig(s)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         # test_time_features = np.squeeze(test_time_features, axis=(1, 2))
 
         # Run training
-        lstm_model.fit(x_train, y_train, x_val, y_val)
+        # lstm_model.fit(x_train, y_train, x_val, y_val)
 
         # Make 1-step predictions
         # predictions = lstm_model.predict(x_test[:, 0, :, :])

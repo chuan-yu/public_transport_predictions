@@ -3,22 +3,23 @@ import reader
 import os
 import numpy as np
 from matplotlib import pyplot as plt
+from configs.configs import LSTMConfigBus
 
 DATA_LIST_FILE = "../data/stop_boarding_counts/bus_no_2/data_file_list.txt"
 
 class LSTMConfig():
     def __init__(self, stop_code):
-        self.train_batch_size = 128
-        self.state_size = [200, 200]
+        self.train_batch_size = 256
+        self.state_size = [200]
         self.feature_len = 4
         self.output_time_steps = 10
         self.input_time_steps = 50
         self.lr = 0.005
         self.lr_decay = 1.0
-        self.num_epochs = 200
-        self.keep_prob = 0.5
+        self.num_epochs = 100
+        self.keep_prob = 1.0
         self.write_summary = False
-        self.checkpoint = os.path.join("../checkpoints/bus", stop_code, "checkpoint.ckpt")
+        self.checkpoint = os.path.join("../checkpoints/bus/4Mar/", stop_code, "checkpoint.ckpt")
         self.tensorboard_dir = "summaries/bus"
 
 if __name__ == "__main__":
@@ -47,10 +48,10 @@ if __name__ == "__main__":
         df = np.array(df)
         df = np.vstack(df)
 
-        train, val, test, test_time_features = reader.produce_seq2seq_data(df,
-                                                                           batch_size=config.train_batch_size,
-                                                                           input_seq_len=config.input_time_steps,
-                                                                           output_seq_len=config.output_time_steps)
+        train, val, test = reader.produce_seq2seq_data(df,
+                                                       batch_size=config.train_batch_size,
+                                                       input_seq_len=config.input_time_steps,
+                                                       output_seq_len=config.output_time_steps)
 
         x_train, y_train = train[0], train[1]
         x_val, y_val, = val[0], val[1]

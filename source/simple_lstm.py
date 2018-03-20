@@ -53,17 +53,20 @@ class Simple_LSTM():
 
     def _get_lstm_cells(self):
         with tf.variable_scope('lstm_cells'):
-            cells = [tf.contrib.rnn.DropoutWrapper(tf.nn.rnn_cell.LSTMCell(size), output_keep_prob=self._keep_prob_placeholder)
-                     for size in self.state_size]
+            cells = [tf.contrib.rnn.DropoutWrapper(
+                tf.nn.rnn_cell.LSTMCell(size, initializer=tf.contrib.layers.xavier_initializer()),
+                output_keep_prob=self._keep_prob_placeholder) for size in self.state_size]
             cells = tf.contrib.rnn.MultiRNNCell(cells)
             return cells
 
     def _build_model(self):
 
         self._w_out = tf.get_variable("output_weights", dtype=tf.float32,
-                                      initializer=tf.truncated_normal([self.state_size[-1], self.output_time_steps]))
+                                      shape=[self.state_size[-1], self.output_time_steps],
+                                      initializer=tf.contrib.layers.xavier_initializer())
         self._b_out = tf.get_variable("output_bias", dtype=tf.float32,
-                                      initializer=tf.truncated_normal([1, self.output_time_steps]))
+                                      shape=[1, self.output_time_steps],
+                                      initializer=tf.contrib.layers.xavier_initializer())
         self._global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
         self._best_val_loss = tf.Variable(100, dtype=tf.float32, trainable=False, name="best_val_loss")
 

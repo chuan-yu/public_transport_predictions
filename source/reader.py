@@ -77,16 +77,16 @@ def get_scaled_mrt_data(data_path=None, stations_codes=None, datetime_features=F
         day_week = np.array(index.dayofweek)
         raw_data['hour'] = hours
         raw_data['day_of_week'] = day_week
-        raw_data['dt'] = index.date
-        raw_data['is_workday'] = raw_data['day_of_week'] // 5 == 0
+        # raw_data['dt'] = index.date
+        # raw_data['is_workday'] = raw_data['day_of_week'] // 5 == 0
         if holidays is not None:
             holidays = [datetime.strptime(h, '%Y-%m-%d') for h in holidays]
             for h in holidays:
                 date = h.date()
                 raw_data.ix[(raw_data['dt']==date), 'is_workday'] = False
 
-        raw_data['is_workday'] = raw_data['is_workday'].astype(int)
-        raw_data.drop(['dt'], axis=1, inplace=True)
+        # raw_data['is_workday'] = raw_data['is_workday'].astype(int)
+        # raw_data.drop(['dt'], axis=1, inplace=True)
 
     data = raw_data.as_matrix(columns=None)
     data = _scale(data)
